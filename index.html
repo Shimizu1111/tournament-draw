@@ -1,0 +1,592 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>大会抽選システム</title>
+<style>
+:root{
+  --bg:#f6f7f5; --panel:#ffffff; --border:#dcdfd8; --text:#1e2420; --muted:#6b7269;
+  --accent:#1f7a4d; --accent-weak:#e6f2eb; --accent-text:#ffffff;
+  --warn:#b4531b; --line:#b9bfb5; --shadow:0 1px 3px rgba(0,0,0,.07);
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --bg:#15181a; --panel:#1e2225; --border:#333a3d; --text:#e6eae7; --muted:#9aa39d;
+    --accent:#41b47a; --accent-weak:#1d3329; --accent-text:#0f1512;
+    --warn:#e08a4d; --line:#4a534e; --shadow:0 1px 3px rgba(0,0,0,.4);
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#15181a; --panel:#1e2225; --border:#333a3d; --text:#e6eae7; --muted:#9aa39d;
+  --accent:#41b47a; --accent-weak:#1d3329; --accent-text:#0f1512;
+  --warn:#e08a4d; --line:#4a534e; --shadow:0 1px 3px rgba(0,0,0,.4);
+}
+*{box-sizing:border-box}
+body{
+  margin:0; background:var(--bg); color:var(--text);
+  font-family:"Hiragino Kaku Gothic ProN","Hiragino Sans","Yu Gothic",Meiryo,system-ui,sans-serif;
+  font-size:15px; line-height:1.6;
+}
+.wrap{max-width:1180px; margin:0 auto; padding:24px 16px 80px}
+header h1{font-size:22px; margin:0 0 4px; letter-spacing:.02em}
+header p{margin:0 0 20px; color:var(--muted); font-size:13px}
+.panel{background:var(--panel); border:1px solid var(--border); border-radius:10px; padding:18px; margin-bottom:18px; box-shadow:var(--shadow)}
+.panel h2{font-size:15px; margin:0 0 12px; display:flex; align-items:center; gap:8px}
+.panel h2 .num{display:inline-grid; place-items:center; width:22px; height:22px; border-radius:50%; background:var(--accent); color:var(--accent-text); font-size:12px; font-weight:700}
+label{display:block; font-size:13px; color:var(--muted); margin:0 0 5px}
+textarea,input,select{
+  width:100%; padding:9px 11px; border:1px solid var(--border); border-radius:7px;
+  background:var(--bg); color:var(--text); font:inherit; font-size:14px;
+}
+textarea{min-height:190px; resize:vertical; line-height:1.9; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:13px}
+.row{display:flex; gap:14px; flex-wrap:wrap}
+.row>div{flex:1 1 190px; min-width:0}
+button{
+  font:inherit; font-size:14px; padding:9px 18px; border-radius:7px; border:1px solid var(--border);
+  background:var(--panel); color:var(--text); cursor:pointer;
+}
+button:hover{border-color:var(--line)}
+button.primary{background:var(--accent); border-color:var(--accent); color:var(--accent-text); font-weight:700}
+button.primary:hover{filter:brightness(1.08)}
+.btns{display:flex; gap:10px; flex-wrap:wrap; margin-top:14px; align-items:center}
+.hint{font-size:12px; color:var(--muted); margin-top:7px}
+.count{font-size:13px; color:var(--accent); font-weight:700}
+.seedbox{
+  margin-top:12px; padding:10px 12px; background:var(--accent-weak); border-radius:7px;
+  font-size:13px; display:none;
+}
+.seedbox.show{display:block}
+.seedbox code{font-family:ui-monospace,Menlo,monospace; font-weight:700; letter-spacing:.06em}
+.tabs{display:flex; gap:6px; margin-bottom:14px; flex-wrap:wrap}
+.tabs button{border-radius:999px; padding:6px 16px; font-size:13px}
+.tabs button[aria-selected="true"]{background:var(--accent); border-color:var(--accent); color:var(--accent-text); font-weight:700}
+#result{display:none}
+#result.show{display:block}
+.err{color:var(--warn); font-size:13px; margin-top:8px; display:none}
+.err.show{display:block}
+
+/* ---- トーナメント表 ---- */
+.bracket-scroll{overflow-x:auto; padding:8px 4px 16px}
+.bracket{display:flex; gap:34px; min-width:min-content; align-items:stretch}
+.round{display:flex; flex-direction:column; flex:0 0 186px}
+.round-head{
+  font-size:12px; font-weight:700; color:var(--muted); text-align:center;
+  padding-bottom:10px; letter-spacing:.05em;
+}
+.slots{flex:1; display:flex; flex-direction:column}
+.slot{flex:1; display:flex; align-items:center; position:relative; min-height:74px; padding:5px 0}
+.round:not(:last-child) .slot::before{
+  content:""; position:absolute; right:-17px; width:17px; top:50%; border-top:1px solid var(--line);
+}
+.round:not(:last-child) .slot:nth-child(odd)::after{
+  content:""; position:absolute; right:-17px; top:50%; height:100%; width:0; border-right:1px solid var(--line);
+}
+.round:not(:first-child) .match::before{
+  content:""; position:absolute; left:-17px; width:17px; top:50%; border-top:1px solid var(--line);
+}
+.match{
+  width:100%; position:relative; border:1px solid var(--border); border-radius:7px;
+  background:var(--panel); overflow:hidden;
+}
+.match .mno{
+  font-size:10px; padding:2px 9px; color:var(--muted); font-weight:700; letter-spacing:.04em;
+  background:var(--accent-weak); border-bottom:1px solid var(--border);
+}
+.team{
+  padding:7px 9px; font-size:13px; cursor:pointer; display:flex; align-items:center; gap:6px;
+  min-height:34px; border-bottom:1px solid var(--border); background:var(--panel);
+}
+.team:last-child{border-bottom:none}
+.team:hover:not(.empty){background:var(--accent-weak)}
+.team.win{background:var(--accent-weak); font-weight:700; color:var(--accent)}
+.team.empty{color:var(--muted); cursor:default; font-style:italic}
+.team.bye{color:var(--muted); cursor:default}
+.team .nm{overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+
+/* ---- リーグ表 ---- */
+.groups{display:grid; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); gap:16px}
+.group{border:1px solid var(--border); border-radius:8px; overflow:hidden; background:var(--panel)}
+.group h3{margin:0; padding:8px 12px; font-size:13px; background:var(--accent-weak); color:var(--accent)}
+table{width:100%; border-collapse:collapse; font-size:13px}
+th,td{padding:6px 10px; text-align:left; border-top:1px solid var(--border)}
+th{color:var(--muted); font-weight:600; font-size:12px}
+td.c,th.c{text-align:center; width:44px}
+.fixtures{margin-top:18px}
+.fixtures table td.vs{text-align:center; color:var(--muted); width:34px}
+
+@media print{
+  body{background:#fff; color:#000}
+  .noprint{display:none !important}
+  .panel{border:none; box-shadow:none; padding:0}
+  .bracket-scroll{overflow:visible}
+  .wrap{max-width:none; padding:0}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <h1>大会抽選システム</h1>
+  <p>完全ランダム抽選 ／ 抽選シード値で結果を再現・検証できます</p>
+</header>
+
+<div class="panel noprint">
+  <h2><span class="num">1</span>大会情報</h2>
+  <div class="row">
+    <div>
+      <label for="title">大会名</label>
+      <input id="title" type="text" placeholder="例：第◯回 エスペランサ熊本カップ">
+    </div>
+    <div>
+      <label for="date">開催日</label>
+      <input id="date" type="date">
+    </div>
+  </div>
+</div>
+
+<div class="panel noprint">
+  <h2><span class="num">2</span>参加チーム</h2>
+  <label for="teams">1行に1チームずつ入力してください</label>
+  <textarea id="teams" placeholder="エスペランサ熊本A&#10;エスペランサ熊本B&#10;〇〇FC&#10;△△サッカースポーツ少年団&#10;..."></textarea>
+  <p class="hint">空行・重複行は自動で無視されます。現在 <span class="count" id="cnt">0</span> チーム</p>
+</div>
+
+<div class="panel noprint">
+  <h2><span class="num">3</span>大会形式</h2>
+  <div class="row">
+    <div>
+      <label for="mode">形式</label>
+      <select id="mode">
+        <option value="ko">トーナメント戦のみ（勝ち上がり）</option>
+        <option value="league">予選リーグ ＋ 決勝トーナメント</option>
+        <option value="leagueonly">リーグ戦のみ（総当たり）</option>
+      </select>
+    </div>
+    <div id="groupWrap">
+      <label for="groups">グループ数</label>
+      <select id="groups">
+        <option value="2">2グループ</option>
+        <option value="3">3グループ</option>
+        <option value="4" selected>4グループ</option>
+        <option value="5">5グループ</option>
+        <option value="6">6グループ</option>
+      </select>
+    </div>
+    <div id="advWrap">
+      <label for="adv">各グループからの決勝T進出</label>
+      <select id="adv">
+        <option value="1">1位のみ</option>
+        <option value="2" selected>上位2チーム</option>
+      </select>
+    </div>
+  </div>
+  <div class="btns">
+    <button class="primary" id="draw">抽選を実行する</button>
+    <button id="redraw" style="display:none">引き直す</button>
+    <label style="flex:0 0 auto; margin:0; display:flex; align-items:center; gap:7px">
+      <span>シード値を指定</span>
+      <input id="seedIn" type="text" placeholder="空欄でランダム" style="width:160px; font-family:ui-monospace,Menlo,monospace">
+    </label>
+  </div>
+  <div class="err" id="err"></div>
+  <div class="seedbox" id="seedbox">
+    抽選シード値：<code id="seedOut"></code>
+    　<span style="color:var(--muted)">この値を記録しておけば、同じ組合せをいつでも再現して検証できます。</span>
+  </div>
+</div>
+
+<div id="result">
+  <div class="panel">
+    <div class="tabs noprint" id="tabs"></div>
+    <div id="view"></div>
+  </div>
+  <div class="btns noprint" style="margin-bottom:40px">
+    <button id="print">印刷 / PDF保存</button>
+    <button id="csv">対戦表をCSVで保存</button>
+    <button id="csvTeams">抽選結果（組番号順）をCSVで保存</button>
+  </div>
+</div>
+</div>
+
+<script>
+"use strict";
+
+/* ========== 乱数（シード固定・再現可能） ========== */
+function makeRng(seedStr){
+  // xmur3 でハッシュ → mulberry32
+  let h = 1779033703 ^ seedStr.length;
+  for (let i = 0; i < seedStr.length; i++) {
+    h = Math.imul(h ^ seedStr.charCodeAt(i), 3432918353);
+    h = (h << 13) | (h >>> 19);
+  }
+  let a = (h ^= h >>> 16) >>> 0;
+  return function(){
+    a |= 0; a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+function newSeed(){
+  const c = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  let s = "";
+  const b = new Uint32Array(12);
+  crypto.getRandomValues(b);
+  for (let i = 0; i < 12; i++) s += c[b[i] % c.length];
+  return s.slice(0,4) + "-" + s.slice(4,8) + "-" + s.slice(8,12);
+}
+function shuffle(arr, rng){
+  const a = arr.slice();
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+/* ========== トーナメント ========== */
+// 標準シード順（1回戦の不戦勝を最大限に分散させる並び）
+function seedOrder(n){
+  let a = [1];
+  while (a.length < n) {
+    const m = a.length * 2 + 1;
+    a = a.flatMap(x => [x, m - x]);
+  }
+  return a;
+}
+function buildBracket(teams){
+  const n = teams.length;
+  let size = 2;
+  while (size < n) size *= 2;
+  const order = seedOrder(size);
+  // order[i] 番目のシードがスロット i に入る。n を超えるシード番号は不戦勝(null)
+  const slots = order.map(s => (s <= n ? teams[s - 1] : null));
+
+  const rounds = [];
+  let cur = slots;
+  let first = true;
+  while (cur.length > 1) {
+    const matches = [];
+    for (let i = 0; i < cur.length; i += 2) {
+      matches.push({ a: cur[i], b: cur[i + 1], winner: null, no: 0 });
+    }
+    rounds.push(matches);
+    // 1回戦の不戦勝のみ自動で勝ち上がり。2回戦以降は勝者が決まるまで未定
+    cur = matches.map(m => {
+      if (first && m.a && !m.b) { m.winner = "a"; return m.a; }
+      if (first && !m.a && m.b) { m.winner = "b"; return m.b; }
+      return null;
+    });
+    first = false;
+  }
+  // 試合番号。1回戦は実際に対戦する試合のみ、2回戦以降は全試合に付番（不戦勝は番号なし）
+  let no = 1;
+  rounds.forEach((r, ri) => r.forEach(m => {
+    if (ri > 0 || (m.a && m.b)) m.no = no++;
+  }));
+  return rounds;
+}
+function roundName(idx, total){
+  const left = total - idx;
+  if (left === 1) return "決勝";
+  if (left === 2) return "準決勝";
+  if (left === 3) return "準々決勝";
+  return (idx + 1) + "回戦";
+}
+
+// 決勝トーナメント1回戦で同一グループ同士の対戦が残っていたら入れ替えて解消する
+function fixSameGroup(first){
+  const grp = v => (v ? v.charAt(0) : null);
+  const conflict = m => m.a && m.b && grp(m.a) === grp(m.b);
+  const slots = [];
+  first.forEach((m, i) => { slots.push([i, "a"], [i, "b"]); });
+  for (let pass = 0; pass < 4; pass++) {
+    const bad = first.findIndex(conflict);
+    if (bad < 0) break;
+    let done = false;
+    for (const [j, k] of slots) {
+      if (j === bad) continue;
+      const m1 = first[bad], m2 = first[j];
+      [m1.b, m2[k]] = [m2[k], m1.b];
+      if (!conflict(m1) && !conflict(m2)) { done = true; break; }
+      [m1.b, m2[k]] = [m2[k], m1.b]; // 戻す
+    }
+    if (!done) break; // 解消不能（グループ数が少ない等）はそのまま
+  }
+}
+
+/* ========== リーグ（総当たり） ========== */
+function splitGroups(teams, g){
+  const out = Array.from({length:g}, () => []);
+  teams.forEach((t, i) => out[i % g].push(t)); // 蛇腹ではなく順送りで均等配分
+  return out;
+}
+function roundRobin(list){
+  // サークル法：n が奇数なら休み(null)を1つ足す
+  const a = list.slice();
+  if (a.length % 2) a.push(null);
+  const n = a.length, rounds = [];
+  for (let r = 0; r < n - 1; r++) {
+    const pairs = [];
+    for (let i = 0; i < n / 2; i++) {
+      const x = a[i], y = a[n - 1 - i];
+      if (x && y) pairs.push([x, y]);
+    }
+    rounds.push(pairs);
+    a.splice(1, 0, a.pop()); // 先頭固定で回転
+  }
+  return rounds;
+}
+
+/* ========== 状態 ========== */
+let S = null;
+
+/* ========== 描画 ========== */
+function esc(s){
+  return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+}
+function renderBracket(rounds, root){
+  const total = rounds.length;
+  let html = '<div class="bracket-scroll"><div class="bracket">';
+  rounds.forEach((ms, ri) => {
+    html += '<div class="round"><div class="round-head">' + roundName(ri, total) + '</div><div class="slots">';
+    ms.forEach((m, mi) => {
+      html += '<div class="slot"><div class="match">';
+      if (m.no) html += '<div class="mno">第' + m.no + '試合</div>';
+      ["a","b"].forEach(k => {
+        const v = m[k];
+        const other = m[k === "a" ? "b" : "a"];
+        let cls = "team", txt;
+        if (v === null) {
+          if (ri === 0 && other) { cls += " bye"; txt = "― 不戦勝 ―"; }
+          else { cls += " empty"; txt = "勝者"; }
+        } else {
+          txt = v;
+          if (m.winner === k) cls += " win";
+        }
+        html += '<div class="' + cls + '" data-r="' + ri + '" data-m="' + mi + '" data-s="' + k + '">'
+              + '<span class="nm">' + esc(txt) + '</span></div>';
+      });
+      html += '</div></div>';
+    });
+    html += '</div></div>';
+  });
+  html += '</div></div><p class="hint noprint">チーム名をクリックすると勝者として次の試合へ進めます（大会当日の記録用）。</p>';
+  root.innerHTML = html;
+}
+function setWinner(rounds, ri, mi, side){
+  const m = rounds[ri][mi];
+  if (!m[side]) return;
+  m.winner = (m.winner === side) ? null : side;
+  // 以降のラウンドを再計算（勝者の繰り上げ・取り消しを伝播）
+  for (let r = ri; r < rounds.length - 1; r++) {
+    rounds[r].forEach((mm, i) => {
+      const w = mm.winner ? mm[mm.winner] : null;
+      const nx = rounds[r + 1][Math.floor(i / 2)];
+      nx[i % 2 === 0 ? "a" : "b"] = w;
+    });
+    // 枠が空になった試合の勝者指定は無効化。片側だけ埋まった場合は不戦勝扱い
+    rounds[r + 1].forEach(mm => {
+      if (mm.winner && !mm[mm.winner]) mm.winner = null;
+    });
+  }
+  render();
+}
+function renderGroups(root){
+  let html = '<div class="groups">';
+  S.groups.forEach((g, i) => {
+    const gn = String.fromCharCode(65 + i);
+    html += '<div class="group"><h3>' + gn + 'グループ（' + g.length + 'チーム）</h3><table>';
+    html += '<tr><th class="c">組</th><th>チーム名</th></tr>';
+    g.forEach((t, j) => {
+      html += '<tr><td class="c">' + gn + (j + 1) + '</td><td>' + esc(t) + '</td></tr>';
+    });
+    html += '</table></div>';
+  });
+  html += '</div>';
+  root.innerHTML = html;
+}
+function renderFixtures(root){
+  let html = '';
+  S.groups.forEach((g, i) => {
+    const gn = String.fromCharCode(65 + i);
+    const rr = roundRobin(g);
+    html += '<div class="fixtures"><h3 style="font-size:14px;margin:0 0 8px">' + gn + 'グループ 対戦カード</h3><table>';
+    let no = 1;
+    rr.forEach((pairs, r) => {
+      pairs.forEach(p => {
+        html += '<tr><td class="c">' + gn + '-' + (no++) + '</td><td style="text-align:right">'
+             + esc(p[0]) + '</td><td class="vs">vs</td><td>' + esc(p[1]) + '</td></tr>';
+      });
+    });
+    html += '</table></div>';
+  });
+  root.innerHTML = html;
+}
+function renderHeadInfo(){
+  const t = document.getElementById("title").value.trim();
+  const d = document.getElementById("date").value;
+  let h = "";
+  if (t) h += '<h2 style="font-size:18px;margin:0 0 4px">' + esc(t) + '</h2>';
+  if (d) h += '<p style="margin:0 0 4px;color:var(--muted);font-size:13px">' + d.replace(/-/g,"/") + '</p>';
+  h += '<p style="margin:0 0 16px;color:var(--muted);font-size:12px">参加 ' + S.teams.length
+     + ' チーム ／ 抽選シード値 <code style="font-family:ui-monospace,Menlo,monospace">' + esc(S.seed) + '</code></p>';
+  return h;
+}
+let tab = 0;
+function render(){
+  const view = document.getElementById("view");
+  const tabs = document.getElementById("tabs");
+  const names = S.views.map(v => v.name);
+  tabs.innerHTML = names.map((n, i) =>
+    '<button data-t="' + i + '" aria-selected="' + (i === tab) + '">' + n + '</button>').join("");
+  view.innerHTML = renderHeadInfo() + '<div id="body"></div>';
+  S.views[tab].draw(document.getElementById("body"));
+  document.getElementById("result").classList.add("show");
+}
+
+/* ========== 抽選実行 ========== */
+function parseTeams(){
+  const raw = document.getElementById("teams").value.split("\n").map(s => s.trim()).filter(Boolean);
+  return [...new Set(raw)];
+}
+function run(seed){
+  const err = document.getElementById("err");
+  const teams = parseTeams();
+  const mode = document.getElementById("mode").value;
+  const g = +document.getElementById("groups").value;
+  const adv = +document.getElementById("adv").value;
+
+  if (teams.length < 2) { err.textContent = "参加チームを2つ以上入力してください。"; err.classList.add("show"); return; }
+  if (mode !== "ko" && teams.length < g * 2) {
+    err.textContent = g + "グループに分けるには最低 " + (g * 2) + " チーム必要です。グループ数を減らしてください。";
+    err.classList.add("show"); return;
+  }
+  err.classList.remove("show");
+
+  const rng = makeRng(seed);
+  const shuffled = shuffle(teams, rng);
+  S = { seed, teams, mode, shuffled, views: [] };
+
+  if (mode === "ko") {
+    S.rounds = buildBracket(shuffled);
+    S.views = [{ name:"トーナメント表", rounds: S.rounds, draw: root => renderBracket(S.rounds, root) }];
+  } else {
+    S.groups = splitGroups(shuffled, g);
+    S.views = [
+      { name:"組合せ（グループ分け）", draw: renderGroups },
+      { name:"対戦カード", draw: renderFixtures }
+    ];
+    if (mode === "league") {
+      // 決勝トーナメントは「Aグループ1位」等のプレースホルダで作成
+      const L = i => String.fromCharCode(65 + i);
+      const ph = S.groups.map((_, i) => L(i) + "グループ1位");
+      if (adv === 2) {
+        // 2位の並びをずらし、同一グループの1位と2位が初戦で当たりにくいようにする
+        for (let k = 1; k <= g; k++) ph.push(L((g + 1 - k) % g) + "グループ2位");
+      }
+      S.finalRounds = buildBracket(ph);
+      fixSameGroup(S.finalRounds[0]);
+      S.views.push({ name:"決勝トーナメント", rounds: S.finalRounds, draw: root => renderBracket(S.finalRounds, root) });
+    }
+  }
+  tab = 0;
+  document.getElementById("seedOut").textContent = seed;
+  document.getElementById("seedbox").classList.add("show");
+  document.getElementById("redraw").style.display = "";
+  render();
+  document.getElementById("result").scrollIntoView({ behavior:"smooth", block:"start" });
+}
+
+/* ========== CSV ========== */
+// claude.ai で公開した場合は downloads 機能経由、ローカルHTMLでは通常のダウンロード
+let dlCap = null;
+if (typeof window.claude !== "undefined" && window.claude && typeof window.claude.use === "function") {
+  window.claude.use("downloads").then(c => { dlCap = c; }).catch(() => {});
+}
+async function dl(name, text){
+  const blob = new Blob(["﻿" + text], { type:"text/csv;charset=utf-8" });
+  if (dlCap) {
+    try { await dlCap.save({ filename: name, data: blob }); }
+    catch (e) { if (e && e.code !== "declined") alert("保存できませんでした：" + (e.message || e.code)); }
+    return;
+  }
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+function csvEsc(s){ return '"' + String(s).replace(/"/g,'""') + '"'; }
+function fixturesCsv(){
+  const rows = [["区分","試合番号","チームA","チームB"]];
+  if (S.mode === "ko") {
+    S.rounds.forEach((ms, ri) => ms.forEach(m => {
+      if (m.no) rows.push([roundName(ri, S.rounds.length), "第" + m.no + "試合", m.a || "勝者", m.b || "勝者"]);
+    }));
+  } else {
+    S.groups.forEach((g, i) => {
+      const gn = String.fromCharCode(65 + i);
+      let no = 1;
+      roundRobin(g).forEach(pairs => pairs.forEach(p => {
+        rows.push([gn + "グループ", gn + "-" + (no++), p[0], p[1]]);
+      }));
+    });
+    if (S.finalRounds) {
+      S.finalRounds.forEach((ms, ri) => ms.forEach(m => {
+        if (m.no) rows.push(["決勝T " + roundName(ri, S.finalRounds.length), "第" + m.no + "試合", m.a || "勝者", m.b || "勝者"]);
+      }));
+    }
+  }
+  return rows.map(r => r.map(csvEsc).join(",")).join("\r\n");
+}
+function teamsCsv(){
+  const rows = [["抽選番号","チーム名","所属"]];
+  if (S.mode === "ko") {
+    S.shuffled.forEach((t, i) => rows.push([i + 1, t, "トーナメント"]));
+  } else {
+    S.groups.forEach((g, i) => {
+      const gn = String.fromCharCode(65 + i);
+      g.forEach((t, j) => rows.push([gn + (j + 1), t, gn + "グループ"]));
+    });
+  }
+  return rows.map(r => r.map(csvEsc).join(",")).join("\r\n");
+}
+function fname(base){
+  const t = document.getElementById("title").value.trim() || "大会";
+  return t.replace(/[\\/:*?"<>|]/g,"_") + "_" + base + ".csv";
+}
+
+/* ========== イベント ========== */
+const $ = id => document.getElementById(id);
+$("teams").addEventListener("input", () => { $("cnt").textContent = parseTeams().length; });
+$("mode").addEventListener("change", () => {
+  const m = $("mode").value;
+  $("groupWrap").style.display = (m === "ko") ? "none" : "";
+  $("advWrap").style.display = (m === "league") ? "" : "none";
+});
+$("mode").dispatchEvent(new Event("change"));
+
+$("draw").addEventListener("click", () => {
+  const given = $("seedIn").value.trim();
+  run(given || newSeed());
+});
+$("redraw").addEventListener("click", () => { $("seedIn").value = ""; run(newSeed()); });
+$("tabs").addEventListener("click", e => {
+  const b = e.target.closest("button[data-t]");
+  if (b) { tab = +b.dataset.t; render(); }
+});
+$("view").addEventListener("click", e => {
+  const el = e.target.closest(".team[data-r]");
+  if (!el || el.classList.contains("empty") || el.classList.contains("bye")) return;
+  const rounds = S.views[tab].rounds;
+  if (!rounds) return;
+  setWinner(rounds, +el.dataset.r, +el.dataset.m, el.dataset.s);
+});
+$("print").addEventListener("click", () => window.print());
+$("csv").addEventListener("click", () => dl(fname("対戦表"), fixturesCsv()));
+$("csvTeams").addEventListener("click", () => dl(fname("抽選結果"), teamsCsv()));
+</script>
+</body>
+</html>
