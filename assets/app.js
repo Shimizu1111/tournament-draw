@@ -151,20 +151,32 @@ function teamAt(cat, slot) {
 }
 function slotLabel(slot) { return LG[Math.floor(slot / 4)] + (slot % 4 + 1); }
 
-/** 1日目の全試合。court:1|2, slot:0-11 */
+/** 1日目の全試合。court:1|2、slot:0-11、no はコートごとに1〜12
+   第1コート A,A,B,B,A,A,B,B,A,A,B,B ／ 第2コート C,C,D,D,C,C,D,D,C,C,D,D
+   1ブロックを2試合続けて行うことで、各チームの試合間隔のばらつきを抑える */
 function day1Schedule() {
   const rows = [];
   for (let s = 0; s < 12; s++) {
-    const mi = Math.floor(s / 2);
-    const odd = s % 2;                       // 0: A・C  /  1: B・D
-    [[1, odd ? 1 : 0], [2, odd ? 3 : 2]].forEach(([court, li]) => {
+    const mi = Math.floor(s / 4) * 2 + (s % 2);   // そのブロックの何試合目か
+    const second = Math.floor(s / 2) % 2 === 1;   // A/C か B/D か
+    [[1, second ? 1 : 0], [2, second ? 3 : 2]].forEach(([court, li]) => {
       const [x, y] = LEAGUE_ORDER[mi];
-      rows.push({ slot: s, court, li, mi, a: li * 4 + x, b: li * 4 + y });
+      rows.push({ slot: s, court, li, mi, no: s + 1, a: li * 4 + x, b: li * 4 + y });
     });
   }
   rows.sort((p, q) => p.slot - q.slot || p.court - q.court);
-  rows.forEach((r, i) => { r.no = i + 1; });
   return rows;
+}
+
+/** 各チームの試合間隔（何試合分空くか）の最小・最大 */
+function restRange(bySlot) {
+  const last = new Map(); let min = Infinity, max = 0;
+  bySlot.forEach((teams, s) => teams.forEach(t => {
+    if (t === null) return;
+    if (last.has(t)) { const g = s - last.get(t) - 1; min = Math.min(min, g); max = Math.max(max, g); }
+    last.set(t, s);
+  }));
+  return { min: min === Infinity ? 0 : min, max };
 }
 
 function scoreOf(cat, L, mi) { return cat.scores[L + "-" + mi] || null; }
@@ -275,14 +287,13 @@ function finalRanking(cat) {
   return out;
 }
 
-/** 2日目の進行。court1=上位、court2=下位 */
+/** 2日目の進行。court1=上位、court2=下位。no はコートごとに1〜12 */
 function day2Schedule() {
   const rows = [];
   D2_ORDER.forEach((k, s) => {
-    rows.push({ slot: s, court: 1, block: "U", key: k });
-    rows.push({ slot: s, court: 2, block: "L", key: k });
+    rows.push({ slot: s, court: 1, block: "U", key: k, no: s + 1 });
+    rows.push({ slot: s, court: 2, block: "L", key: k, no: s + 1 });
   });
-  rows.forEach((r, i) => { r.no = i + 1; });
   return rows;
 }
 
@@ -304,11 +315,14 @@ function consecutiveViolations(pairsBySlot) {
   }
   return bad;
 }
-function day1Consecutive() {
-  const cat = C();
+function day1Slots() {
   const bySlot = Array.from({ length: 12 }, () => []);
   day1Schedule().forEach(r => { bySlot[r.slot].push(r.a, r.b); });
-  return consecutiveViolations(bySlot).map(v => ({ ...v, name: teamAt(cat, v.team)?.name || slotLabel(v.team) }));
+  return bySlot;
+}
+function day1Consecutive() {
+  const cat = C();
+  return consecutiveViolations(day1Slots()).map(v => ({ ...v, name: teamAt(cat, v.team)?.name || slotLabel(v.team) }));
 }
 function day2Consecutive() {
   const cat = C();

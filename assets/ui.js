@@ -165,6 +165,45 @@ function renderDraw() {
   </div>`;
 }
 
+/* ===================== リーグ戦の四角形（対戦図） ===================== */
+/** 4隅にチーム名、辺と対角線の6本が6試合を表す図 */
+function leagueSquare(cat, li) {
+  const L = LG[li];
+  const X1 = 112, X2 = 288, Y1 = 74, Y2 = 182;   // 四角形の頂点
+  const pt = [[X1, Y1], [X2, Y1], [X2, Y2], [X1, Y2]];   // 1番→2番→3番→4番（左上から時計回り）
+  const lab = [[X1, 50], [X2, 50], [X2, 212], [X1, 212]];
+
+  const lines = [
+    [0, 1], [1, 2], [2, 3], [3, 0], [0, 2], [1, 3]       // 辺4本＋対角線2本＝6試合
+  ].map(([i, j]) =>
+    `<line x1="${pt[i][0]}" y1="${pt[i][1]}" x2="${pt[j][0]}" y2="${pt[j][1]}"/>`).join("");
+
+  const corners = pt.map(([x, y], p) => `
+    <circle cx="${x}" cy="${y}" r="13" class="cn"/>
+    <text x="${x}" y="${y + 4.5}" class="cnum">${p + 1}</text>`).join("");
+
+  const names = lab.map(([x, y], p) => {
+    const nm = teamNameAt(cat, li * 4 + p);
+    const fs = nm.length > 14 ? 10 : nm.length > 10 ? 11.5 : 13;
+    return `<text x="${x}" y="${y}" class="tnm" font-size="${fs}">${esc(nm)}</text>`;
+  }).join("");
+
+  return `<div class="sq">
+    <svg viewBox="0 0 400 232" role="img" aria-label="${L}ブロック 対戦図">
+      <g class="ln">${lines}</g>
+      <rect x="164" y="114" width="72" height="28" class="mask"/>
+      <text x="200" y="133" class="ctr">${L}ブロック</text>
+      ${corners}${names}
+    </svg>
+  </div>`;
+}
+function leagueSquares(cat) {
+  return `<div class="panel">
+    <h2>${esc(ST.cat)}　1日目 リーグ戦 対戦図<span class="sub">4隅がチーム・線が6試合を表します（抽選結果を自動反映）</span></h2>
+    <div class="sqgrid">${LG.map((_, li) => leagueSquare(cat, li)).join("")}</div>
+  </div>`;
+}
+
 /* ===================== 1日目 リーグ戦 ===================== */
 function leagueBlock(cat, li) {
   const L = LG[li];
@@ -225,13 +264,14 @@ function day1ScheduleSection() {
       <table class="sched"><tr><th>No</th><th>開始</th><th>組</th><th colspan="3">対戦カード</th></tr>${tr}</table></div>`;
   }).join("");
 
+  const rest = restRange(day1Slots());
   return `
   <div class="panel">
     <h2>${esc(ST.cat)}　1日目 進行表<span class="sub">${esc(ST.meta.d1 ? ST.meta.d1.replace(/-/g, "/") : "")}　4チーム総当たり × 4ブロック ＝ 24試合</span></h2>
     <div class="courtcol">${courts}</div>
     <div class="note ${bad.length ? "warn" : ""}">${bad.length
       ? "<b>連続試合があります：</b>" + bad.map(b => esc(b.name)).join("、")
-      : '<span class="ok">✓ 同じチームが連続して試合することはありません</span>（各チーム 最短でも1試合分の休憩を確保）'}</div>
+      : `<span class="ok">✓ 同じチームが連続して試合することはありません</span>　試合間隔は全チーム ${rest.min}〜${rest.max}試合分`}</div>
   </div>`;
 }
 
@@ -241,7 +281,7 @@ function renderDay1() {
     return `<div class="panel"><h2>1日目 リーグ戦</h2>
       <div class="note warn">先に抽選を完了してください。</div></div>`;
   }
-  return day1ScheduleSection() + LG.map((_, li) => leagueBlock(cat, li)).join("");
+  return leagueSquares(cat) + day1ScheduleSection() + LG.map((_, li) => leagueBlock(cat, li)).join("");
 }
 
 /* ===================== 2日目 トーナメント ===================== */
@@ -408,7 +448,7 @@ function renderOut() {
     <div class="courtcol">${LG.map((_, li) => `<div class="tablescroll">${matrixTable(cat, li)}</div>`).join("")}</div>
   </div>
 
-  <div class="pagebreak">${day1ScheduleSection()}</div>
+  <div class="pagebreak">${leagueSquares(cat)}${day1ScheduleSection()}</div>
   <div class="pagebreak">${blockSection(cat, "U")}${blockSection(cat, "L")}</div>`;
 }
 

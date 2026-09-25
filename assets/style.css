@@ -188,3 +188,22 @@ table.sched tbody tr:nth-child(even){background:color-mix(in srgb,var(--bg) 55%,
   .pagebreak{break-before:page}
   table.grid th,table.sched th{background:#eee !important; color:#000 !important; -webkit-print-color-adjust:exact; print-color-adjust:exact}
 }
+
+/* ---- リーグ戦の四角形（対戦図） ---- */
+.sqgrid{display:grid; grid-template-columns:repeat(auto-fit,minmax(238px,1fr)); gap:12px}
+.sq{border:1px solid var(--border); border-radius:9px; background:var(--panel); padding:2px 4px; color:var(--text)}
+.sq svg{width:100%; height:auto; display:block}
+.sq .ln line{stroke:var(--line); stroke-width:1.6}
+.sq circle.cn{fill:var(--accent-weak); stroke:var(--accent); stroke-width:1.4}
+.sq text{fill:currentColor; font-family:inherit}
+.sq text.cnum{font-size:12px; font-weight:700; text-anchor:middle; fill:var(--accent)}
+.sq text.tnm{text-anchor:middle; font-weight:700}
+.sq text.ctr{text-anchor:middle; font-size:13px; font-weight:700; fill:var(--muted)}
+.sq rect.mask{fill:var(--panel)}
+@media print{
+  .sqgrid{grid-template-columns:repeat(4,1fr)}
+  .sq{break-inside:avoid}
+  .sq .ln line{stroke:#666}
+  .sq circle.cn{fill:#fff; stroke:#666}
+  .sq rect.mask{fill:#fff}
+}
