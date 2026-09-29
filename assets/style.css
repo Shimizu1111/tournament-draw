@@ -234,3 +234,46 @@ body.ro #view input:disabled,
 body.ro #view select:disabled,
 body.ro #view textarea:disabled{opacity:1; color:var(--text); background:var(--panel)}
 body.ro #view button:disabled{opacity:.3}
+
+/* ---- 大会の切り替え（画面左上） ---- */
+.evwrap{position:relative; flex:0 1 auto; min-width:0}
+.brandbtn{
+  display:block; text-align:left; border:1px solid transparent; background:none;
+  padding:4px 8px; border-radius:8px; cursor:pointer; max-width:46vw;
+}
+.brandbtn:hover{background:var(--bg); border-color:var(--border)}
+.brandbtn[aria-expanded="true"]{background:var(--bg); border-color:var(--line)}
+.brandbtn .bn{
+  display:flex; align-items:center; gap:6px;
+  font-size:16px; font-weight:700; color:var(--text); line-height:1.3;
+}
+.brandbtn .bn #brandname{overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.brandbtn .caret{font-size:11px; color:var(--muted); flex:0 0 auto}
+.brandbtn small{display:block; font-size:11px; font-weight:400; color:var(--muted); letter-spacing:.04em}
+
+.evmenu{
+  position:absolute; top:calc(100% + 6px); left:0; z-index:40;
+  min-width:300px; max-width:calc(100vw - 32px);
+  background:var(--panel); border:1px solid var(--border); border-radius:10px;
+  box-shadow:0 8px 24px rgba(0,0,0,.14); padding:6px; max-height:70vh; overflow:auto;
+}
+.evmenu h4{
+  margin:4px 8px 6px; font-size:11px; color:var(--muted); font-weight:700; letter-spacing:.06em;
+}
+.evmenu .pick{
+  display:flex; gap:9px; align-items:flex-start; width:100%; text-align:left;
+  border:none; background:none; padding:8px 10px; border-radius:7px; cursor:pointer; color:var(--text);
+}
+.evmenu .pick:hover{background:var(--bg)}
+.evmenu .pick.cur{background:var(--accent-weak)}
+.evmenu .pick .ck{flex:0 0 16px; color:var(--accent); font-weight:700; font-size:13px}
+.evmenu .pick .nm{flex:1; min-width:0}
+.evmenu .pick .nm b{display:block; font-size:14px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.evmenu .pick .nm span{display:block; font-size:11px; color:var(--muted); margin-top:1px}
+.evmenu hr{border:none; border-top:1px solid var(--border); margin:6px 4px}
+.evmenu .act{
+  display:block; width:100%; text-align:left; border:none; background:none;
+  padding:8px 10px; border-radius:7px; cursor:pointer; color:var(--text); font-size:13px;
+}
+.evmenu .act:hover{background:var(--bg)}
+@media (max-width:640px){ .brandbtn{max-width:64vw} }

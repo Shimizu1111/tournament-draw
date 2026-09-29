@@ -101,7 +101,7 @@ function renderSetup() {
   </div>
 
   <div class="panel">
-    <h2>大会の管理<span class="sub">複数の大会を保存し、切り替えて使えます</span></h2>
+    <h2>大会の管理<span class="sub">切り替えるだけなら画面左上の大会名からできます</span></h2>
     <div class="evlist">
       ${Object.values(DB.events).sort((a, b) => b.updatedAt - a.updatedAt).map(ev => {
         const st = normalizeState(ev.state);
@@ -171,6 +171,38 @@ function renderSetup() {
       「新しい大会を作る」で本番用の大会を別に用意してください。</b></p>
   </div>`;
 }
+
+/* ===================== 大会の切り替えメニュー（画面左上） ===================== */
+let evMenuOpen = false;
+
+function renderEvMenu() {
+  const box = $("#evmenu"), btn = $("#evsw");
+  if (!box) return;
+  btn.setAttribute("aria-expanded", evMenuOpen ? "true" : "false");
+  box.hidden = !evMenuOpen;
+  if (!evMenuOpen) { box.innerHTML = ""; return; }
+
+  const list = Object.values(DB.events).sort((a, b) => b.updatedAt - a.updatedAt);
+  box.innerHTML = `
+    <h4>大会を選ぶ（${list.length}件）</h4>
+    ${list.map(ev => {
+      const st = normalizeState(ev.state);
+      const pg = eventProgress(ev);
+      const cur = ev.id === DB.currentId;
+      const sh = ev.share;
+      return `<button class="pick ${cur ? "cur" : ""}" data-evpick="${ev.id}">
+        <span class="ck">${cur ? "✓" : ""}</span>
+        <span class="nm"><b>${esc(st.meta.name || "（名称未設定）")}</b>
+          <span>抽選 ${pg.drawn}/3　・　最終更新 ${nowStamp(ev.updatedAt)}${
+            sh ? "　・　共有中" + (sh.role === "viewer" ? "（閲覧専用）" : "") : ""}</span></span>
+      </button>`;
+    }).join("")}
+    <hr>
+    <button class="act" id="b-evm-new">＋　新しい大会を作る</button>
+    <button class="act" id="b-evm-new2">＋　今の設定を引き継いで作る</button>
+    <button class="act" id="b-evm-manage">　　大会の管理を開く（複製・削除）</button>`;
+}
+function closeEvMenu() { if (evMenuOpen) { evMenuOpen = false; renderEvMenu(); } }
 
 /* ===================== 他の端末と共有 ===================== */
 function sharePanel() {
@@ -666,6 +698,7 @@ function render() {
   $("#steps").innerHTML = VIEWS.map(v =>
     `<button data-view="${v.k}" aria-selected="${v.k === ST.view}">${v.n}</button>`).join("");
   $("#brandname").textContent = ST.meta.name || "大会運営システム";
+  renderEvMenu();
 
   const fn = { setup: renderSetup, teams: renderTeams, draw: renderDraw, day1: renderDay1, day2: renderDay2, out: renderOut }[ST.view];
   $("#view").innerHTML = fn();
@@ -745,7 +778,26 @@ function csvRank() {
 
 /* ===================== イベント ===================== */
 document.addEventListener("click", e => {
+  // メニューの外をクリックしたら閉じる
+  if (evMenuOpen && !e.target.closest("#evmenu") && !e.target.closest("#evsw")) closeEvMenu();
+
   const b = e.target.closest("button"); if (!b) return;
+
+  if (b.id === "evsw") { evMenuOpen = !evMenuOpen; renderEvMenu(); return; }
+  if (b.dataset.evpick) {
+    closeEvMenu();
+    if (b.dataset.evpick !== DB.currentId) { save(); openEvent(b.dataset.evpick); startSync(); }
+    render(); window.scrollTo(0, 0); return;
+  }
+  if (b.id === "b-evm-manage") { closeEvMenu(); ST.view = "setup"; render();
+    setTimeout(() => { const h = [...document.querySelectorAll(".panel>h2")].find(x => x.textContent.includes("大会の管理")); if (h) h.scrollIntoView({ behavior: "smooth", block: "start" }); }, 30);
+    return; }
+  if (b.id === "b-evm-new" || b.id === "b-evm-new2") {
+    closeEvMenu();
+    const nm = (prompt("新しい大会の名前", ST.meta.name || "大会") || "").trim();
+    if (!nm) return;
+    save(); createEvent(nm, b.id === "b-evm-new2"); startSync(); render(); window.scrollTo(0, 0); return;
+  }
 
   if (b.dataset.cat) { ST.cat = b.dataset.cat; render(); return; }
 
@@ -994,6 +1046,8 @@ document.addEventListener("change", e => {
     r.readAsText(f);
   }
 });
+
+document.addEventListener("keydown", e => { if (e.key === "Escape") closeEvMenu(); });
 
 /* ===================== 起動 ===================== */
 load();
