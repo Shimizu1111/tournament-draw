@@ -220,7 +220,8 @@ function duplicateEvent(id) {
   if (!src) return null;
   const nid = newId("evt_");
   const st = JSON.parse(JSON.stringify(normalizeState(src.state)));
-  st.meta.name = (st.meta.name || "大会") + "（コピー）";
+  const d = new Date(), z = n => String(n).padStart(2, "0");
+  st.meta.name = (st.meta.name || "大会") + `（複製 ${z(d.getMonth() + 1)}/${z(d.getDate())} ${z(d.getHours())}:${z(d.getMinutes())}）`;
   DB.events[nid] = { id: nid, createdAt: Date.now(), updatedAt: Date.now(), state: st };
   openEvent(nid);
   return nid;

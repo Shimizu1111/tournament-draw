@@ -111,6 +111,7 @@ function renderSetup() {
       </div>
     </div>
     <div class="btns">
+      <button data-evrename="${DB.currentId}">名前を変更する</button>
       <button data-ev="dup" data-id="${DB.currentId}">この大会を複製する</button>
       <button id="b-ev-clear" style="color:var(--warn)">入力内容をすべて消す</button>
       <button data-ev="del" data-id="${DB.currentId}" style="margin-left:auto;color:var(--warn)">この大会を削除する</button>
@@ -176,11 +177,16 @@ function renderEvMenu() {
       const st = normalizeState(ev.state);
       const pg = eventProgress(ev);
       const cur = ev.id === DB.currentId;
-      return `<button class="pick ${cur ? "cur" : ""}" data-evpick="${ev.id}">
-        <span class="ck">${cur ? "✓" : ""}</span>
-        <span class="nm"><b>${esc(st.meta.name || "（名称未設定）")}</b>
-          <span>抽選 ${pg.drawn}/3　・　最終更新 ${nowStamp(ev.updatedAt)}</span></span>
-      </button>`;
+      const teams = CATS.reduce((n, c) => n + st.cats[c].teams.filter(t => t.name.trim()).length, 0);
+      const when = [st.meta.d1, st.meta.d2].filter(Boolean).map(d => d.replace(/-/g, "/").slice(5)).join("・");
+      return `<span class="pickrow ${cur ? "cur" : ""}">
+        <button class="pick" data-evpick="${ev.id}">
+          <span class="ck">${cur ? "✓" : ""}</span>
+          <span class="nm"><b>${esc(st.meta.name || "（名称未設定）")}</b>
+            <span>${when ? when + "　・　" : ""}${teams}チーム　・　抽選 ${pg.drawn}/3　・　更新 ${nowStamp(ev.updatedAt)}</span></span>
+        </button>
+        <button class="rn" data-evrename="${ev.id}" title="名前を変更">名前</button>
+      </span>`;
     }).join("")}
     <hr>
     <button class="act" id="b-evm-new">＋　新しい大会を作る</button>
@@ -727,6 +733,16 @@ document.addEventListener("click", e => {
   const b = e.target.closest("button"); if (!b) return;
 
   if (b.id === "evsw") { evMenuOpen = !evMenuOpen; renderEvMenu(); return; }
+  if (b.dataset.evrename) {
+    const id = b.dataset.evrename, ev = DB.events[id];
+    if (!ev) return;
+    const st = normalizeState(ev.state);
+    const nm = (prompt("大会の名前", st.meta.name || "") || "").trim();
+    if (!nm || nm === st.meta.name) return;
+    if (id === DB.currentId) { ST.meta.name = nm; save(); }
+    else { st.meta.name = nm; ev.state = st; ev.updatedAt = Date.now(); persist(); schedulePush(); }
+    renderEvMenu(); render(); return;
+  }
   if (b.dataset.evpick) {
     closeEvMenu();
     if (b.dataset.evpick !== DB.currentId) { save(); openEvent(b.dataset.evpick); startSync(); }
@@ -737,7 +753,9 @@ document.addEventListener("click", e => {
     return; }
   if (b.id === "b-evm-new" || b.id === "b-evm-new2") {
     closeEvMenu();
-    const nm = (prompt("新しい大会の名前", ST.meta.name || "大会") || "").trim();
+    const d = new Date(), z = n => String(n).padStart(2, "0");
+    const suggest = `新しい大会 ${d.getFullYear()}/${z(d.getMonth() + 1)}/${z(d.getDate())}`;
+    const nm = (prompt("新しい大会の名前\n（あとから「名前」ボタンで変更できます）", suggest) || "").trim();
     if (!nm) return;
     save(); createEvent(nm, b.id === "b-evm-new2"); startSync(); render(); window.scrollTo(0, 0); return;
   }

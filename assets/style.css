@@ -287,3 +287,15 @@ body.ro #view button:disabled{opacity:.3}
 .syncbadge.busy{background:var(--bg); color:var(--muted)}
 .syncbadge.warn{background:var(--warn-weak); color:var(--warn); border-color:transparent}
 .syncbadge.off{background:var(--bg); color:var(--muted)}
+
+/* ---- 大会一覧の行（名前変更ボタン付き） ---- */
+.evmenu .pickrow{display:flex; align-items:stretch; gap:2px; border-radius:7px}
+.evmenu .pickrow.cur{background:var(--accent-weak)}
+.evmenu .pickrow:hover{background:var(--bg)}
+.evmenu .pickrow .pick{flex:1; min-width:0}
+.evmenu .pickrow .pick:hover{background:none}
+.evmenu .pickrow .rn{
+  flex:0 0 auto; align-self:center; margin-right:6px; border:1px solid var(--border);
+  background:var(--panel); color:var(--muted); font-size:11px; padding:3px 9px; border-radius:6px; cursor:pointer;
+}
+.evmenu .pickrow .rn:hover{color:var(--text); border-color:var(--line)}
