@@ -44,11 +44,23 @@ function wsPayload() {
   return { events, deleted: DB.deleted || {} };
 }
 
-/** まだ一度も使われていない空の大会か（初回接続時に重複させないため） */
+/** まだ一度も使われていない大会か（初回接続時に重複させないため）
+   参加チームが初期値のままなら「未使用」とみなす。
+   これを判定しないと、端末を開くたびに同じ名前の大会が増えてしまう */
 function isPristine(ev) {
   const st = normalizeState(ev.state);
-  const noTeams = CATS.every(c => !st.cats[c].order && st.cats[c].teams.every(t => !t.name.trim()));
-  return noTeams && st.meta.name === initState().meta.name && !st.meta.d1 && !st.meta.venue;
+  const base = initState();
+  const untouched = CATS.every(c => {
+    const x = st.cats[c];
+    if (x.order || x.revealed) return false;
+    if (Object.keys(x.scores || {}).length || Object.keys(x.d2 || {}).length) return false;
+    const def = defaultTeams(c);
+    const empty = x.teams.every(t => !t.name.trim());
+    const same = x.teams.length === def.length
+      && x.teams.every((t, i) => t.name === def[i].name && t.pref === def[i].pref);
+    return empty || same;
+  });
+  return untouched && st.meta.name === base.meta.name && !st.meta.d1 && !st.meta.d2 && !st.meta.venue;
 }
 
 /** ローカルとサーバーの大会一覧を統合する。同じ大会は更新が新しいほうを採用 */

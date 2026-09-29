@@ -170,8 +170,13 @@ function persist() {
 function save() {
   const ev = DB.events[DB.currentId];
   if (ev) {
-    ev.state = { meta: ST.meta, sched: ST.sched, cats: ST.cats };
-    ev.updatedAt = Date.now();
+    // 中身が変わったときだけ更新日時を進める。
+    // 開いただけで日時が進むと、古い内容が新しい内容を上書きしてしまう
+    const next = JSON.stringify({ meta: ST.meta, sched: ST.sched, cats: ST.cats });
+    if (next !== JSON.stringify(ev.state)) {
+      ev.state = JSON.parse(next);
+      ev.updatedAt = Date.now();
+    }
   }
   DB.ui = { cat: ST.cat };
   persist();
