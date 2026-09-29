@@ -223,3 +223,14 @@ table.sched tbody tr:nth-child(even){background:color-mix(in srgb,var(--bg) 55%,
 .evrow .ev-main b{font-size:14px; margin-right:8px}
 .evrow .ev-sub{font-size:11px; color:var(--muted); line-height:1.5; margin-top:2px}
 .evrow .ev-btn{display:flex; gap:6px; flex:0 0 auto}
+
+/* ---- 閲覧専用モード ---- */
+.rotag{display:none}
+body.ro .rotag{
+  display:inline-block; font-size:11px; font-weight:700; padding:3px 10px;
+  border-radius:999px; background:var(--lo-weak); color:var(--lo);
+}
+body.ro #view input:disabled,
+body.ro #view select:disabled,
+body.ro #view textarea:disabled{opacity:1; color:var(--text); background:var(--panel)}
+body.ro #view button:disabled{opacity:.3}

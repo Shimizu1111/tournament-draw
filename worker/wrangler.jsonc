@@ -1,0 +1,15 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "tournament-share",
+  "main": "src/index.js",
+  "compatibility_date": "2026-09-01",
+  "observability": { "enabled": true },
+
+  // 大会1件につき Durable Object 1つ。SQLiteバックエンド（Workers無料プランで利用可）
+  "durable_objects": {
+    "bindings": [{ "name": "ROOM", "class_name": "TournamentRoom" }]
+  },
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["TournamentRoom"] }
+  ]
+}

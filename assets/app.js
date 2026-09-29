@@ -101,7 +101,8 @@ let ST = initState();
      DB = { v, currentId, events:{id:{id,createdAt,updatedAt,state}}, snaps:[], ui, pref }
      ST = 現在開いている大会の内容（meta / sched / cats）＋ 画面状態
    ===================================================================== */
-let DB = { v: 2, currentId: null, events: {}, snaps: [], ui: {}, pref: { autoDl: true } };
+const DEFAULT_API = "https://tournament-share.foritemaqua.workers.dev";   // 共有サーバー（worker/ をデプロイしたURL）
+let DB = { v: 2, currentId: null, events: {}, snaps: [], ui: {}, pref: { autoDl: true, apiBase: DEFAULT_API } };
 
 function newId(prefix) {
   return prefix + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
@@ -148,14 +149,14 @@ function load() {
   let o = null;
   try { o = JSON.parse(localStorage.getItem(STORE_KEY) || "null"); } catch (e) { /* 壊れていれば初期化 */ }
   if (o && o.events && Object.keys(o.events).length) {
-    DB = Object.assign({ v: 2, snaps: [], ui: {}, pref: { autoDl: true } }, o);
+    DB = Object.assign({ v: 2, snaps: [], ui: {}, pref: {} }, o);
     DB.snaps = DB.snaps || [];
-    DB.pref = Object.assign({ autoDl: true }, DB.pref || {});
+    DB.pref = Object.assign({ autoDl: true, apiBase: DEFAULT_API }, DB.pref || {});
   } else {
     // 旧バージョン（単一大会）のデータがあれば引き継ぐ
     let old = null;
     try { old = JSON.parse(localStorage.getItem(OLD_KEY) || "null"); } catch (e) { /* 無視 */ }
-    DB = { v: 2, currentId: null, events: {}, snaps: [], ui: {}, pref: { autoDl: true } };
+    DB = { v: 2, currentId: null, events: {}, snaps: [], ui: {}, pref: { autoDl: true, apiBase: DEFAULT_API } };
     const id = newId("evt_");
     DB.events[id] = { id, createdAt: Date.now(), updatedAt: Date.now(), state: normalizeState(old) };
     DB.currentId = id;
