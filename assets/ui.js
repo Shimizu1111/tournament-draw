@@ -101,13 +101,60 @@ function renderSetup() {
   </div>
 
   <div class="panel">
-    <h2>データの保存<span class="sub">入力内容はこのブラウザに自動保存されます</span></h2>
+    <h2>大会の管理<span class="sub">複数の大会を保存し、切り替えて使えます</span></h2>
+    <div class="evlist">
+      ${Object.values(DB.events).sort((a, b) => b.updatedAt - a.updatedAt).map(ev => {
+        const st = normalizeState(ev.state);
+        const pg = eventProgress(ev);
+        const cur = ev.id === DB.currentId;
+        return `<div class="evrow ${cur ? "cur" : ""}">
+          <div class="ev-main">
+            <b>${esc(st.meta.name || "（名称未設定）")}</b>${cur ? '<span class="tag">使用中</span>' : ""}
+            <div class="ev-sub">
+              ${st.meta.d1 ? esc(st.meta.d1.replace(/-/g, "/")) + "　" : ""}最終更新 ${nowStamp(ev.updatedAt)}<br>
+              抽選 ${pg.drawn}/3カテゴリ　・　1日目終了 ${pg.d1}/3　・　順位確定 ${pg.done}/3
+            </div>
+          </div>
+          <div class="ev-btn">
+            ${cur ? "" : `<button class="sm" data-ev="open" data-id="${ev.id}">開く</button>`}
+            <button class="sm" data-ev="dup" data-id="${ev.id}">複製</button>
+            <button class="sm" data-ev="del" data-id="${ev.id}" style="color:var(--warn)">削除</button>
+          </div>
+        </div>`;
+      }).join("")}
+    </div>
     <div class="btns">
+      <button class="primary" id="b-ev-new">新しい大会を作る</button>
+      <button id="b-ev-new2">今の設定を引き継いで作る</button>
+      <button id="b-ev-clear" style="margin-left:auto;color:var(--warn)">この大会の入力内容をすべて消す</button>
+    </div>
+    <p class="hint">「今の設定を引き継いで作る」は、タイムスケジュールと進行方式だけを引き継ぎ、
+      チームと結果は空の状態で新しい大会を作ります。来年の大会や別カップの準備に使えます。</p>
+  </div>
+
+  <div class="panel">
+    <h2>バックアップと復元<span class="sub">入力内容はこのブラウザに自動保存されます</span></h2>
+    <div class="btns" style="margin-top:0">
       <button id="b-export">バックアップを保存（JSON）</button>
       <button id="b-import">バックアップを読み込む</button>
-      <button id="b-reset" style="margin-left:auto;color:var(--warn)">全データを初期化</button>
+      <button id="b-snap">いまの状態を復元ポイントにする</button>
     </div>
-    <p class="hint">抽選会の当日は、抽選後に必ず一度バックアップを保存してください。別のPCやスマホに引き継ぐこともできます。</p>
+    <label style="display:flex;align-items:center;gap:8px;color:var(--text);font-size:13px;margin-top:12px">
+      <input type="checkbox" id="f-autodl" ${DB.pref.autoDl ? "checked" : ""} style="width:auto">
+      抽選が確定したとき、バックアップファイルを自動で保存する
+    </label>
+    ${(() => {
+      const list = DB.snaps.filter(x => x.eventId === DB.currentId).slice().reverse();
+      if (!list.length) return '<p class="hint">復元ポイントはまだありません。抽選の確定時やデータを消す操作の直前に自動で作られます。</p>';
+      return `<h3 class="sect" style="margin:16px 0 8px"><span class="tag gray">復元ポイント（新しい順・最大12件）</span></h3>
+        <div class="evlist">${list.map(x => `<div class="evrow">
+          <div class="ev-main"><b>${esc(x.label)}</b>
+            <div class="ev-sub">${nowStamp(x.at)}　${esc(x.name || "")}</div></div>
+          <div class="ev-btn"><button class="sm" data-snap="${x.id}">この時点に戻す</button></div>
+        </div>`).join("")}</div>`;
+    })()}
+    <p class="hint">復元ポイントはこのブラウザの中にだけ残ります。
+      <b>端末の故障やデータ消去に備えて、抽選後には必ず「バックアップを保存」でファイルを残してください。</b></p>
   </div>
 
   <div class="panel">
@@ -118,7 +165,8 @@ function renderSetup() {
     </div>
     <p class="hint">九州7県×2＋開催県枠2の想定で16チーム分入ります。熊本が4チームあるので、
       同じ県が4ブロックに分かれる動きも確認できます。<br>
-      <b style="color:var(--warn)">本番の登録前に「全データを初期化」でサンプルを消してください。</b></p>
+      <b style="color:var(--warn)">本番の登録前に「この大会の入力内容をすべて消す」でサンプルを消すか、
+      「新しい大会を作る」で本番用の大会を別に用意してください。</b></p>
   </div>`;
 }
 
@@ -551,6 +599,18 @@ function dl(name, text) {
   a.href = URL.createObjectURL(blob); a.download = name; a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }
+/** すべての大会と復元ポイントを1つのJSONファイルに書き出す */
+function exportBackup(suffix) {
+  save();
+  const blob = new Blob([JSON.stringify(DB, null, 2)], { type: "application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  const d = new Date(), p = n => String(n).padStart(2, "0");
+  a.download = (ST.meta.name || "大会").replace(/[\\/:*?"<>|]/g, "_")
+    + (suffix ? "_" + suffix : "") + `_${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}.json`;
+  a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
 function fname(base) {
   return (ST.meta.name || "大会").replace(/[\\/:*?"<>|]/g, "_") + "_" + ST.cat + "_" + base + ".csv";
 }
@@ -596,6 +656,25 @@ document.addEventListener("click", e => {
   const b = e.target.closest("button"); if (!b) return;
 
   if (b.dataset.cat) { ST.cat = b.dataset.cat; render(); return; }
+
+  if (b.dataset.ev) {
+    const id = b.dataset.id, ev = DB.events[id];
+    if (!ev) return;
+    const nm = normalizeState(ev.state).meta.name || "（名称未設定）";
+    if (b.dataset.ev === "open") { save(); openEvent(id); render(); return; }
+    if (b.dataset.ev === "dup") { save(); duplicateEvent(id); render(); return; }
+    if (b.dataset.ev === "del") {
+      if (!confirm(`大会「${nm}」を削除します。\nこの大会の抽選結果・試合結果はすべて消え、元に戻せません。\n\n本当に削除しますか？`)) return;
+      if (id === DB.currentId) snap("削除する直前の状態");
+      deleteEvent(id); render(); return;
+    }
+  }
+  if (b.dataset.snap) {
+    const sp = DB.snaps.find(x => x.id === b.dataset.snap);
+    if (!sp) return;
+    if (!confirm(`「${sp.label}」（${nowStamp(sp.at)}）の時点に戻します。\n現在の内容は復元ポイントとして残るので、やり直せます。\n\n戻しますか？`)) return;
+    restoreSnap(b.dataset.snap); render(); return;
+  }
   if (b.dataset.view) { ST.view = b.dataset.view; render(); window.scrollTo(0, 0); return; }
 
   const cat = C();
@@ -621,14 +700,16 @@ document.addEventListener("click", e => {
       cat.scores = {}; cat.rankOrder = {}; cat.d2 = {};
       render(); return;
     }
-    case "b-next": cat.revealed = Math.min(16, cat.revealed + 1); render(); return;
-    case "b-all": cat.revealed = 16; render(); return;
+    case "b-next": cat.revealed = Math.min(16, cat.revealed + 1); afterReveal(cat); render(); return;
+    case "b-all": cat.revealed = 16; afterReveal(cat); render(); return;
     case "b-redo":
       if (!confirm("抽選をやり直します。現在の抽選結果と、入力済みの試合結果もすべて消えます。よろしいですか？")) return;
+      snap(`${ST.cat} 抽選をやり直す直前`);
       cat.order = null; cat.revealed = 0; cat.seed = null; cat.scores = {}; cat.rankOrder = {}; cat.d2 = {};
       render(); return;
     case "b-demo": {
       if (!confirm("3カテゴリすべてにサンプルの16チームを入れ、抽選まで実行します。\n現在入力されている内容は上書きされます。よろしいですか？")) return;
+      snap("サンプル投入の直前");
       CATS.forEach(c => {
         const x = ST.cats[c] = initCat();
         x.teams = demoTeams();
@@ -644,6 +725,7 @@ document.addEventListener("click", e => {
     case "b-demo2": {
       if (!CATS.every(c => ST.cats[c].order)) { alert("先に「サンプル16チームを入れて抽選まで実行」を押してください。"); return; }
       if (!confirm("1日目の全試合にランダムなスコアを入れます。入力済みの結果は上書きされます。よろしいですか？")) return;
+      snap("サンプル結果投入の直前");
       CATS.forEach((c, ci) => {
         const x = ST.cats[c], rng = makeRng("demo-score-" + c + "-" + x.seed);
         x.scores = {}; x.rankOrder = {};
@@ -658,17 +740,27 @@ document.addEventListener("click", e => {
     case "b-csv-d1": dl(fname("1日目進行表"), csvDay1()); return;
     case "b-csv-d2": dl(fname("2日目進行表"), csvDay2()); return;
     case "b-csv-rank": dl(fname("最終順位"), csvRank()); return;
-    case "b-export": {
-      const blob = new Blob([JSON.stringify(ST, null, 2)], { type: "application/json" });
-      const a = document.createElement("a");
-      a.href = URL.createObjectURL(blob);
-      a.download = (ST.meta.name || "大会").replace(/[\\/:*?"<>|]/g, "_") + "_バックアップ.json";
-      a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000); return;
-    }
+    case "b-export": exportBackup(); return;
     case "b-import": $("#f-file").click(); return;
-    case "b-reset":
-      if (!confirm("すべてのカテゴリのデータを消去して初期状態に戻します。よろしいですか？")) return;
-      ST = initState(); render(); return;
+    case "b-snap": {
+      const label = (prompt("復元ポイントの名前", "手動保存") || "").trim();
+      if (!label) return;
+      snap(label); render(); return;
+    }
+    case "b-ev-new":
+    case "b-ev-new2": {
+      const nm = (prompt("新しい大会の名前", ST.meta.name || "大会") || "").trim();
+      if (!nm) return;
+      save();
+      createEvent(nm, b.id === "b-ev-new2");
+      render(); return;
+    }
+    case "b-ev-clear":
+      if (!confirm(`大会「${ST.meta.name}」の入力内容（チーム・抽選・試合結果）をすべて消します。\n直前の状態は復元ポイントに残ります。\n\n消してよろしいですか？`)) return;
+      snap("消去する直前の状態");
+      { const keep = ST.meta.name, sched = JSON.parse(JSON.stringify(ST.sched)), st = normalizeState(null);
+        ST.meta = st.meta; ST.meta.name = keep; ST.sched = sched; ST.cats = st.cats; }
+      save(); render(); return;
   }
 
   // リーグ順位の手動並べ替え
@@ -689,6 +781,14 @@ document.addEventListener("click", e => {
     render(); return;
   }
 });
+
+/** 抽選が16枠すべて公開された瞬間に、復元ポイントと自動バックアップを作る */
+function afterReveal(cat) {
+  if (cat.revealed < 16 || cat.snapped) return;
+  cat.snapped = true;
+  snap(`${ST.cat} 抽選確定`);
+  if (DB.pref.autoDl) setTimeout(() => exportBackup(`${ST.cat}抽選確定`), 300);
+}
 
 /* 入力（再描画なし：入力中のフォーカスを保つ） */
 document.addEventListener("input", e => {
@@ -716,17 +816,37 @@ document.addEventListener("change", e => {
   }
   if (el.name === "d1mode") { ST.sched.d1Mode = el.value; render(); return; }
   if (el.id === "f-avoid") { cat.avoidPref = el.checked; save(); return; }
+  if (el.id === "f-autodl") { DB.pref.autoDl = el.checked; persist(); return; }
   if (el.id === "f-file") {
     const f = el.files && el.files[0]; if (!f) return;
     const r = new FileReader();
     r.onload = () => {
       try {
         const o = JSON.parse(r.result);
-        if (!o || !o.cats) throw new Error("形式が違います");
-        if (!confirm("現在のデータを、読み込むバックアップで置き換えます。よろしいですか？")) return;
-        ST = Object.assign(initState(), o);
-        CATS.forEach(c => { ST.cats[c] = Object.assign(initCat(), ST.cats[c] || {}); });
-        render();
+        if (o && o.events && Object.keys(o.events).length) {
+          // 新形式：大会をまるごと取り込む（既存の大会は残す）
+          const n = Object.keys(o.events).length;
+          if (!confirm(`バックアップに含まれる ${n} 件の大会を取り込みます。\n現在の大会はそのまま残ります。\n\n取り込みますか？`)) return;
+          save();
+          let lastId = null;
+          Object.values(o.events).forEach(ev => {
+            const id = DB.events[ev.id] ? newId("evt_") : ev.id;
+            DB.events[id] = { id, createdAt: ev.createdAt || Date.now(), updatedAt: ev.updatedAt || Date.now(), state: normalizeState(ev.state) };
+            lastId = id;
+          });
+          (o.snaps || []).forEach(sp => { if (DB.events[sp.eventId]) DB.snaps.push(sp); });
+          while (DB.snaps.length > 12) DB.snaps.shift();
+          if (lastId) openEvent(lastId);
+          render();
+        } else if (o && o.cats) {
+          // 旧形式：1大会分として取り込む
+          if (!confirm("バックアップを新しい大会として取り込みます。\n現在の大会はそのまま残ります。\n\n取り込みますか？")) return;
+          save();
+          const id = newId("evt_");
+          DB.events[id] = { id, createdAt: Date.now(), updatedAt: Date.now(), state: normalizeState(o) };
+          openEvent(id);
+          render();
+        } else { throw new Error("形式が違います"); }
       } catch (err) { alert("バックアップファイルを読み込めませんでした：" + err.message); }
       el.value = "";
     };

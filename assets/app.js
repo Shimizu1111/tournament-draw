@@ -8,7 +8,8 @@
 
 const CATS = ["U-7", "U-8", "U-9"];
 const LG = ["A", "B", "C", "D"];
-const STORE_KEY = "fantasista-kyushu-v1";
+const STORE_KEY = "fantasista-kyushu-v2";
+const OLD_KEY = "fantasista-kyushu-v1";   // 旧バージョンからの引き継ぎ用
 
 /* 4チーム総当たりの試合順。[リーグ内位置, リーグ内位置]
    四角形の 上辺 → 下辺 → 左辺 → 右辺 → 対角線 → 対角線 の順
@@ -95,22 +96,146 @@ function initState() {
 }
 let ST = initState();
 
+/* =====================================================================
+   保存層：複数の大会を持ち、節目ごとに復元ポイント（スナップショット）を残す
+     DB = { v, currentId, events:{id:{id,createdAt,updatedAt,state}}, snaps:[], ui, pref }
+     ST = 現在開いている大会の内容（meta / sched / cats）＋ 画面状態
+   ===================================================================== */
+let DB = { v: 2, currentId: null, events: {}, snaps: [], ui: {}, pref: { autoDl: true } };
+
+function newId(prefix) {
+  return prefix + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+}
+function nowStamp(t) {
+  const d = new Date(t);
+  const p = n => String(n).padStart(2, "0");
+  return `${d.getFullYear()}/${p(d.getMonth() + 1)}/${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
+/** 保存データを現在の形式に整える（旧バージョン・欠損にも対応） */
+function normalizeState(o) {
+  const base = initState();
+  const st = { meta: base.meta, sched: base.sched, cats: base.cats };
+  if (o) {
+    st.meta = Object.assign(base.meta, o.meta || {});
+    st.sched = Object.assign(base.sched, o.sched || {});
+    CATS.forEach(c => { st.cats[c] = Object.assign(initCat(), (o.cats || {})[c] || {}); });
+  }
+  return st;
+}
+
+function persist() {
+  try { localStorage.setItem(STORE_KEY, JSON.stringify(DB)); return true; }
+  catch (e) {
+    // 容量オーバー時は古い復元ポイントから捨てて保存を試みる
+    while (DB.snaps.length) {
+      DB.snaps.shift();
+      try { localStorage.setItem(STORE_KEY, JSON.stringify(DB)); return true; } catch (e2) { /* 続行 */ }
+    }
+    return false;
+  }
+}
 function save() {
-  try { localStorage.setItem(STORE_KEY, JSON.stringify(ST)); } catch (e) { /* 保存不可でも継続 */ }
+  const ev = DB.events[DB.currentId];
+  if (ev) {
+    ev.state = { meta: ST.meta, sched: ST.sched, cats: ST.cats };
+    ev.updatedAt = Date.now();
+  }
+  DB.ui = { cat: ST.cat };
+  persist();
 }
 function load() {
-  try {
-    const raw = localStorage.getItem(STORE_KEY);
-    if (!raw) return;
-    const o = JSON.parse(raw);
-    if (!o || !o.cats) return;
-    const base = initState();
-    ST = Object.assign(base, o);
-    ST.meta = Object.assign(initState().meta, o.meta || {});
-    ST.sched = Object.assign(initState().sched, o.sched || {});
-    CATS.forEach(c => { ST.cats[c] = Object.assign(initCat(), ST.cats[c] || {}); });
-  } catch (e) { /* 壊れていれば初期状態 */ }
+  let o = null;
+  try { o = JSON.parse(localStorage.getItem(STORE_KEY) || "null"); } catch (e) { /* 壊れていれば初期化 */ }
+  if (o && o.events && Object.keys(o.events).length) {
+    DB = Object.assign({ v: 2, snaps: [], ui: {}, pref: { autoDl: true } }, o);
+    DB.snaps = DB.snaps || [];
+    DB.pref = Object.assign({ autoDl: true }, DB.pref || {});
+  } else {
+    // 旧バージョン（単一大会）のデータがあれば引き継ぐ
+    let old = null;
+    try { old = JSON.parse(localStorage.getItem(OLD_KEY) || "null"); } catch (e) { /* 無視 */ }
+    DB = { v: 2, currentId: null, events: {}, snaps: [], ui: {}, pref: { autoDl: true } };
+    const id = newId("evt_");
+    DB.events[id] = { id, createdAt: Date.now(), updatedAt: Date.now(), state: normalizeState(old) };
+    DB.currentId = id;
+  }
+  if (!DB.events[DB.currentId]) DB.currentId = Object.keys(DB.events)[0];
+  openEvent(DB.currentId, DB.ui && DB.ui.cat);
 }
+
+function openEvent(id, cat) {
+  const ev = DB.events[id];
+  if (!ev) return;
+  DB.currentId = id;
+  const st = normalizeState(ev.state);
+  ST.meta = st.meta; ST.sched = st.sched; ST.cats = st.cats;
+  ST.cat = CATS.includes(cat) ? cat : CATS[0];
+  persist();
+}
+function createEvent(name, copySched) {
+  const id = newId("evt_");
+  const st = normalizeState(null);
+  if (name) st.meta.name = name;
+  if (copySched) st.sched = JSON.parse(JSON.stringify(ST.sched));
+  DB.events[id] = { id, createdAt: Date.now(), updatedAt: Date.now(), state: st };
+  openEvent(id);
+  return id;
+}
+function duplicateEvent(id) {
+  const src = DB.events[id];
+  if (!src) return null;
+  const nid = newId("evt_");
+  const st = JSON.parse(JSON.stringify(normalizeState(src.state)));
+  st.meta.name = (st.meta.name || "大会") + "（コピー）";
+  DB.events[nid] = { id: nid, createdAt: Date.now(), updatedAt: Date.now(), state: st };
+  openEvent(nid);
+  return nid;
+}
+function deleteEvent(id) {
+  if (!DB.events[id]) return;
+  delete DB.events[id];
+  DB.snaps = DB.snaps.filter(s => s.eventId !== id);
+  const rest = Object.keys(DB.events);
+  if (!rest.length) { createEvent(); return; }
+  openEvent(id === DB.currentId ? rest[0] : DB.currentId);
+}
+/** 大会の進捗（抽選済み・結果入力済みのカテゴリ数） */
+function eventProgress(ev) {
+  const st = normalizeState(ev.state);
+  let drawn = 0, d1 = 0, done = 0;
+  CATS.forEach(c => {
+    const x = st.cats[c];
+    if (x.order && x.revealed >= 16) drawn++;
+    const keep = ST.cats; ST.cats = st.cats;
+    if (x.order && LG.every((_, li) => standings(x, li).allPlayed)) d1++;
+    if (x.order && finalRanking(x).every(v => v !== null)) done++;
+    ST.cats = keep;
+  });
+  return { drawn, d1, done };
+}
+
+/* ---- 復元ポイント ---- */
+function snap(label) {
+  const ev = DB.events[DB.currentId];
+  if (!ev) return;
+  const data = JSON.stringify({ meta: ST.meta, sched: ST.sched, cats: ST.cats });
+  const last = DB.snaps[DB.snaps.length - 1];
+  if (last && last.eventId === ev.id && last.data === data) return;   // 変化なしなら作らない
+  DB.snaps.push({ id: newId("snap_"), at: Date.now(), eventId: ev.id, name: ST.meta.name, label, data });
+  while (DB.snaps.length > 12) DB.snaps.shift();
+  persist();
+}
+function restoreSnap(sid) {
+  const s = DB.snaps.find(x => x.id === sid);
+  if (!s) return false;
+  snap("復元する直前の状態");
+  const st = normalizeState(JSON.parse(s.data));
+  ST.meta = st.meta; ST.sched = st.sched; ST.cats = st.cats;
+  save();
+  return true;
+}
+
 const C = () => ST.cats[ST.cat];
 
 /* =========================  抽選  ========================= */

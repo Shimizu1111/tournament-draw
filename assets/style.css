@@ -211,3 +211,15 @@ table.sched tbody tr:nth-child(even){background:color-mix(in srgb,var(--bg) 55%,
   .sq circle.nmask{fill:#fff}
   .sq>h3{background:#eee !important; color:#000 !important; -webkit-print-color-adjust:exact; print-color-adjust:exact}
 }
+
+/* ---- 大会の管理・復元ポイント ---- */
+.evlist{display:flex; flex-direction:column; gap:8px}
+.evrow{
+  display:flex; gap:12px; align-items:center; flex-wrap:wrap;
+  border:1px solid var(--border); border-radius:8px; padding:9px 12px; background:var(--bg);
+}
+.evrow.cur{border-color:var(--accent); background:var(--accent-weak)}
+.evrow .ev-main{flex:1 1 220px; min-width:0}
+.evrow .ev-main b{font-size:14px; margin-right:8px}
+.evrow .ev-sub{font-size:11px; color:var(--muted); line-height:1.5; margin-top:2px}
+.evrow .ev-btn{display:flex; gap:6px; flex:0 0 auto}
