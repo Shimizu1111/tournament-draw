@@ -60,7 +60,31 @@ export default {
       return json({ ok: true, service: "tournament-share" });
     }
 
-    // 新しい共有を作る
+    // 共有ワークスペース（コード不要・URLを開いた全員が同じ内容を見る）
+    const ws = path.match(/^\/api\/ws\/([A-Za-z0-9_-]{3,64})$/);
+    if (ws) {
+      const stub = env.ROOM.get(env.ROOM.idFromName("WS:" + ws[1].toUpperCase()));
+
+      if (request.method === "GET") {
+        return json(await (await stub.fetch("https://do/ws-get")).json());
+      }
+      if (request.method === "PUT") {
+        const body = await readBody(request);
+        if (body.tooLarge) return json({ error: "too_large" }, 413);
+        if (body.bad) return json({ error: "bad_json" }, 400);
+        const res = await stub.fetch("https://do/ws-put", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ state: body.data.state, baseVersion: body.data.baseVersion })
+        });
+        if (res.status === 409) return json({ error: "conflict", ...(await res.json()) }, 409);
+        if (!res.ok) return json({ error: "put_failed" }, 500);
+        return json(await res.json());
+      }
+      return json({ error: "method_not_allowed" }, 405);
+    }
+
+    // 新しい共有を作る（共有コード方式・従来どおり）
     if (path === "/api/rooms" && request.method === "POST") {
       const body = await readBody(request);
       if (body.tooLarge) return json({ error: "too_large" }, 413);
@@ -146,6 +170,32 @@ export class TournamentRoom {
       await store.put("meta", meta);
       await store.put("state", b.state);
       return Response.json({ version: meta.version });
+    }
+
+    if (path === "/ws-get") {
+      const meta = (await store.get("meta")) || { version: 0, updatedAt: 0 };
+      return Response.json({
+        version: meta.version,
+        updatedAt: meta.updatedAt,
+        state: (await store.get("state")) ?? null
+      });
+    }
+
+    if (path === "/ws-put") {
+      const meta = (await store.get("meta")) || { version: 0, updatedAt: 0 };
+      const b = await request.json();
+      // 別の端末が先に更新していたら、上書きせずサーバーの内容を返す（呼び出し側で統合する）
+      if (typeof b.baseVersion === "number" && b.baseVersion !== meta.version) {
+        return new Response(JSON.stringify({
+          version: meta.version,
+          updatedAt: meta.updatedAt,
+          state: (await store.get("state")) ?? null
+        }), { status: 409, headers: { "content-type": "application/json" } });
+      }
+      const next = { version: meta.version + 1, updatedAt: Date.now() };
+      await store.put("state", b.state);
+      await store.put("meta", next);
+      return Response.json(next);
     }
 
     if (path === "/get") {

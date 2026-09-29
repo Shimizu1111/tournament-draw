@@ -102,7 +102,7 @@ let ST = initState();
      ST = 現在開いている大会の内容（meta / sched / cats）＋ 画面状態
    ===================================================================== */
 const DEFAULT_API = "https://tournament-share.foritemaqua.workers.dev";   // 共有サーバー（worker/ をデプロイしたURL）
-let DB = { v: 2, currentId: null, events: {}, snaps: [], ui: {}, pref: { autoDl: true, apiBase: DEFAULT_API } };
+let DB = { v: 2, currentId: null, events: {}, deleted: {}, snaps: [], ui: {}, pref: { autoDl: true, apiBase: DEFAULT_API } };
 
 function newId(prefix) {
   return prefix + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
@@ -149,14 +149,15 @@ function load() {
   let o = null;
   try { o = JSON.parse(localStorage.getItem(STORE_KEY) || "null"); } catch (e) { /* 壊れていれば初期化 */ }
   if (o && o.events && Object.keys(o.events).length) {
-    DB = Object.assign({ v: 2, snaps: [], ui: {}, pref: {} }, o);
+    DB = Object.assign({ v: 2, snaps: [], ui: {}, deleted: {}, pref: {} }, o);
+    DB.deleted = DB.deleted || {};
     DB.snaps = DB.snaps || [];
     DB.pref = Object.assign({ autoDl: true, apiBase: DEFAULT_API }, DB.pref || {});
   } else {
     // 旧バージョン（単一大会）のデータがあれば引き継ぐ
     let old = null;
     try { old = JSON.parse(localStorage.getItem(OLD_KEY) || "null"); } catch (e) { /* 無視 */ }
-    DB = { v: 2, currentId: null, events: {}, snaps: [], ui: {}, pref: { autoDl: true, apiBase: DEFAULT_API } };
+    DB = { v: 2, currentId: null, events: {}, deleted: {}, snaps: [], ui: {}, pref: { autoDl: true, apiBase: DEFAULT_API } };
     const id = newId("evt_");
     DB.events[id] = { id, createdAt: Date.now(), updatedAt: Date.now(), state: normalizeState(old) };
     DB.currentId = id;
@@ -196,6 +197,8 @@ function duplicateEvent(id) {
 function deleteEvent(id) {
   if (!DB.events[id]) return;
   delete DB.events[id];
+  DB.deleted = DB.deleted || {};
+  DB.deleted[id] = Date.now();          // 他の端末で復活しないよう記録する
   DB.snaps = DB.snaps.filter(s => s.eventId !== id);
   const rest = Object.keys(DB.events);
   if (!rest.length) { createEvent(); return; }

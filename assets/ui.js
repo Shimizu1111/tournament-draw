@@ -176,7 +176,6 @@ function renderEvMenu() {
       const st = normalizeState(ev.state);
       const pg = eventProgress(ev);
       const cur = ev.id === DB.currentId;
-      const sh = ev.share;
       return `<button class="pick ${cur ? "cur" : ""}" data-evpick="${ev.id}">
         <span class="ck">${cur ? "✓" : ""}</span>
         <span class="nm"><b>${esc(st.meta.name || "（名称未設定）")}</b>
@@ -191,83 +190,31 @@ function renderEvMenu() {
 }
 function closeEvMenu() { if (evMenuOpen) { evMenuOpen = false; renderEvMenu(); } }
 
-/* ===================== 他の端末と共有 ===================== */
+/* ===================== 同期 ===================== */
 function sharePanel() {
+  const l = syncLabel();
   const base = apiBase();
-  const sh = shareOf();
-  const viewUrl = sh
-    ? location.origin + location.pathname + "?room=" + fmtCode(sh.code) + "&api=" + encodeURIComponent(base)
-    : "";
-
-  if (!base) {
-    return `<div class="panel">
-      <h2>他の端末と共有<span class="sub">未設定</span></h2>
-      <div class="note">共有サーバーのURLを一度だけ登録すると、別のPCやスマホから同じ大会を開けるようになります。</div>
-      <div class="row" style="margin-top:12px">
-        <div style="flex:2 1 320px">
-          <label for="f-api">共有サーバーのURL</label>
-          <input id="f-api" placeholder="https://tournament-share.〇〇.workers.dev" value="">
-        </div>
-        <div style="flex:0 0 auto"><label>　</label><button class="primary" id="b-api-save">登録する</button></div>
-      </div>
-      <p class="hint">URLは worker/README.md の手順でデプロイすると表示されます。</p>
-    </div>`;
-  }
-
-  const head = `<h2>他の端末と共有
-    <span class="sub">${esc(base.replace(/^https?:\/\//, ""))}
-    <button class="sm" id="b-api-edit" style="margin-left:6px">変更</button></span></h2>`;
-
-  if (SYNC.conflict) {
-    return `<div class="panel"><div class="note warn">
-      <b>別の端末で先に更新されています。</b><br>
-      サーバー側の最終更新：${nowStamp(SYNC.conflict.updatedAt)}<br>
-      どちらを残すか選んでください。選ばなかったほうは失われます（直前の状態は復元ポイントに残します）。
-      <div class="btns">
-        <button class="primary" id="b-cf-server">サーバーの内容にする</button>
-        <button id="b-cf-local">この端末の内容で上書きする</button>
-      </div></div></div>`;
-  }
-
-  if (!sh) {
-    return `<div class="panel">${head}
-      <div class="btns" style="margin-top:0">
-        <button class="primary" id="b-share-new">この大会を共有する</button>
-        <button id="b-share-join">共有コードを入力して開く</button>
-      </div>
-      <p class="hint">共有すると8文字のコードが発行されます。コードを知っている人は閲覧でき、
-        編集できるのはこの端末（編集キーを持つ端末）だけです。</p>
-    </div>`;
-  }
-
-  const owner = sh.role === "owner";
-  return `<div class="panel">${head}
-    <div class="note">
+  return `<div class="panel">
+    <h2>他の端末との共有<span class="sub">URLを開くだけで、どの端末でも同じ内容になります</span></h2>
+    <div class="note ${l.cls === "warn" ? "warn" : ""}">
       <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-        <span class="tag ${owner ? "" : "lo"}">${owner ? "編集できます" : "閲覧専用"}</span>
-        <span>共有コード <b class="mono" style="font-size:17px">${fmtCode(sh.code)}</b></span>
-        <button class="sm" data-copy="${fmtCode(sh.code)}">コードをコピー</button>
-        <button class="sm" data-copy="${esc(viewUrl)}">閲覧用リンクをコピー</button>
+        <span class="syncbadge ${l.cls}" id="syncbadge">${esc(l.text)}</span>
+        ${SYNC.at ? `<span style="font-size:12px;color:var(--muted)">最終同期 ${nowStamp(SYNC.at)}</span>` : ""}
+        <button class="sm" id="b-sync-now" style="margin-left:auto">いますぐ同期</button>
       </div>
       <div style="font-size:12px;color:var(--muted);margin-top:8px">
-        ${SYNC.error ? `<span style="color:var(--warn)">${esc(SYNC.error)}</span>`
-          : esc(SYNC.status || ("最終同期 " + nowStamp(sh.at)))}
-        　／　版 ${sh.version}
+        ${DB.pref.syncOff
+          ? "同期を止めています。この端末で入力した内容は、他の端末には表示されません。"
+          : "この大会の URL を開いた端末は、すべて同じ内容を見て編集できます。入力は数秒で他の端末に反映されます。"}
       </div>
     </div>
-    ${owner ? `<div class="note warn" style="margin-top:10px">
-      <b>編集キー</b>（この大会を編集できる鍵です。他の運営スタッフに編集を任せるときだけ渡してください）<br>
-      <span class="mono" style="font-size:12px;word-break:break-all">${esc(sh.editKey)}</span>
-      <button class="sm" data-copy="${esc(sh.editKey)}" style="margin-left:6px">コピー</button>
-    </div>` : ""}
     <div class="btns">
-      <button id="b-share-pull">いますぐ同期する</button>
-      ${owner ? "" : `<button id="b-share-claim">編集キーを入力して編集できるようにする</button>`}
-      <button id="b-share-stop" style="margin-left:auto;color:var(--warn)">この端末での共有をやめる</button>
+      <button data-ro="ok" data-copy="${esc(location.origin + location.pathname)}">このページのURLをコピー</button>
+      <button id="b-sync-toggle" style="margin-left:auto">${DB.pref.syncOff ? "同期を再開する" : "この端末だけで使う（同期を止める）"}</button>
     </div>
-    <p class="hint">${owner
-      ? "入力するたびに自動で保存されます。通信が切れてもアプリは動き続け、回復すると自動で送信します。"
-      : "20秒ごとに自動で最新の内容を受信します。この端末では編集できません。"}</p>
+    <p class="hint">通信できないときもアプリは動き続け、つながり次第まとめて同期します。
+      サーバー：${esc(base.replace(/^https?:\/\//, "") || "未設定")}
+      <button class="sm" id="b-api-edit">変更</button></p>
   </div>`;
 }
 
@@ -297,25 +244,18 @@ function renderTeams() {
   </div>`;
 }
 
-/** この端末にしか保存されていないことを知らせる（別端末で空に見える理由） */
+/** 同期の状態を参加チーム画面にも小さく出す */
 function storageNotice() {
-  const sh = shareOf();
-  if (sh) {
-    return `<div class="note"><span class="ok">✓ 共有中</span>
-      　共有コード <b class="mono">${fmtCode(sh.code)}</b> で、他の端末からも同じ内容を開けます。
-      ${sh.role === "viewer" ? "（この端末は閲覧専用です）" : ""}</div>`;
+  const l = syncLabel();
+  if (DB.pref.syncOff) {
+    return `<div class="note warn">同期を止めているため、この端末にだけ保存されます。
+      <button class="sm" id="b-sync-toggle2">同期を再開する</button></div>`;
   }
-  return `<div class="note warn">
-    <b>入力内容は、いま使っているこの端末にだけ保存されます。</b><br>
-    別のPCやスマホで同じURLを開いても、ここで入力したチームは表示されません（消えたわけではありません）。
-    別の端末でも開きたい場合は、共有を始めてください。
-    <div class="btns">
-      <button class="primary" id="b-teams-share">共有を始める</button>
-      <button id="b-teams-backup">バックアップを保存しておく</button>
-    </div></div>`;
+  return `<div class="note"><span class="syncbadge ${l.cls}">${esc(l.text)}</span>
+    　入力した内容は自動で保存され、同じURLを開いている他の端末にも反映されます。</div>`;
 }
 
-/* ===================== 抽選 ===================== */
+/* ===================== 抽選 ===================== *//* ===================== 抽選 ===================== */
 function renderDraw() {
   const cat = C();
   const ready = teamsReady(cat);
@@ -710,15 +650,7 @@ function render() {
   $("#view").innerHTML = fn();
   save();
 
-  // 閲覧専用の端末では入力できないようにする（印刷とCSV出力は使える）
-  const ro = isViewer();
-  document.body.classList.toggle("ro", ro);
-  if (ro) {
-    document.querySelectorAll("#view input,#view select,#view textarea").forEach(el => { el.disabled = true; });
-    document.querySelectorAll("#view button").forEach(el => {
-      if (!el.dataset.ro && !el.dataset.copy && !el.id.startsWith("b-share") && !el.id.startsWith("b-cf")) el.disabled = true;
-    });
-  }
+  updateSyncBadge();
 }
 
 /* ===================== 出力（CSV / JSON） ===================== */
@@ -891,54 +823,19 @@ document.addEventListener("click", e => {
       });
       ST.view = "day1"; render(); window.scrollTo(0, 0); return;
     }
-    case "b-api-save": {
-      const v = ($("#f-api").value || "").trim();
-      if (!/^https?:\/\//.test(v)) { alert("https:// から始まるURLを入力してください。"); return; }
-      DB.pref.apiBase = v.replace(/\/+$/, ""); persist(); startSync(); render(); return;
-    }
     case "b-api-edit": {
-      const v = (prompt("共有サーバーのURL", DB.pref.apiBase || "") || "").trim();
+      const v = (prompt("同期サーバーのURL", DB.pref.apiBase || "") || "").trim();
       if (!v) return;
       if (!/^https?:\/\//.test(v)) { alert("https:// から始まるURLを入力してください。"); return; }
-      DB.pref.apiBase = v.replace(/\/+$/, ""); persist(); startSync(); render(); return;
+      DB.pref.apiBase = v.replace(/\/+$/, ""); persist(); SYNC.version = 0; SYNC.lastSent = null; startSync(); render(); return;
     }
-    case "b-share-new":
-      b.disabled = true;
-      shareCreate()
-        .then(sh => { alert("共有を開始しました。\n\n共有コード：" + fmtCode(sh.code) + "\n\nこのコードを伝えると、他の端末から閲覧できます。"); render(); })
-        .catch(e => { alert(e.message); render(); });
-      return;
-    case "b-share-join": {
-      const c = (prompt("共有コード（8文字）を入力してください", "") || "").trim();
-      if (!c) return;
-      shareJoin(c).then(() => render()).catch(e => alert(e.message));
-      return;
+    case "b-sync-now": pullNow(true).then(() => { schedulePush(); render(); }); return;
+    case "b-sync-toggle":
+    case "b-sync-toggle2": {
+      const off = !DB.pref.syncOff;
+      if (off && !confirm("同期を止めます。\nこの端末で入力した内容は、他の端末には表示されなくなります。\n\n止めますか？")) return;
+      setSyncOff(off); render(); return;
     }
-    case "b-share-claim": {
-      const k = (prompt("編集キーを入力してください", "") || "").trim();
-      if (!k) return;
-      const ev = DB.events[DB.currentId];
-      ev.share.editKey = k; ev.share.role = "owner";
-      persist();
-      SYNC.lastPushed = null;
-      pushNow().then(() => {
-        if (SYNC.error || shareOf().role !== "owner") return;
-        render();
-      });
-      render(); return;
-    }
-    case "b-share-pull": pullNow(true).then(() => render()); return;
-    case "b-share-stop":
-      if (!confirm("この端末での共有をやめます。\nサーバー上のデータは残り、共有コードでまた開けます。\n\nやめますか？")) return;
-      shareStop(); render(); return;
-    case "b-cf-server": conflictTakeServer(); render(); return;
-    case "b-cf-local": conflictKeepLocal().then(() => render()); return;
-    case "b-teams-share":
-      b.disabled = true;
-      shareCreate()
-        .then(sh => { alert("共有を開始しました。\n\n共有コード：" + fmtCode(sh.code) + "\n\n「大会設定 → 他の端末と共有」から、閲覧用リンクをコピーして配れます。"); render(); })
-        .catch(e => { alert(e.message); render(); });
-      return;
     case "b-teams-backup": exportBackup(); return;
     case "b-print": window.print(); return;
     case "b-csv-draw": dl(fname("抽選結果"), csvDraw()); return;
@@ -990,7 +887,6 @@ function afterReveal(cat) {
 /* 入力（再描画なし：入力中のフォーカスを保つ） */
 document.addEventListener("input", e => {
   const el = e.target;
-  if (isViewer()) return;
   if (el.dataset.meta) { ST.meta[el.dataset.meta] = el.value; if (el.dataset.meta === "name") $("#brandname").textContent = el.value; save(); return; }
   if (el.dataset.sched) { ST.sched[el.dataset.sched] = el.value; save(); return; }
   if (el.dataset.team !== undefined) { C().teams[+el.dataset.team][el.dataset.f] = el.value; save(); return; }
@@ -1056,20 +952,9 @@ document.addEventListener("keydown", e => { if (e.key === "Escape") closeEvMenu(
 
 /* ===================== 起動 ===================== */
 load();
-
-// 閲覧用リンク（?room=XXXX-XXXX）で開かれた場合は、その大会を読み込む
-const qp = new URLSearchParams(location.search);
-const roomParam = qp.get("room");
-if (roomParam) {
-  adoptApiBase(qp.get("api"));
-  shareJoin(roomParam)
-    .then(() => { history.replaceState(null, "", location.pathname); render(); })
-    .catch(e => { alert(e.message); render(); });
-}
-
 startSync();
 render();
 
-// 保存されるたびに、オーナー端末なら自動で送信する
+// 保存されるたびに自動で同期する
 const _save = save;
 save = function () { _save(); schedulePush(); };
