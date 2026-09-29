@@ -232,6 +232,12 @@ function renderTeams() {
     <h2>${esc(ST.cat)} 参加チーム<span class="sub">16チーム（県名は同県対戦の回避に使います・任意）</span></h2>
     <div class="teamgrid">${rows}</div>
     <p class="hint">入力済み <b class="${filled === 16 ? "ok" : ""}">${filled} / 16</b> チーム${cat.order ? "　※すでに抽選済みです。チームを変更した場合は抽選をやり直してください。" : ""}</p>
+    <div class="btns" style="margin-top:10px">
+      <button id="b-teams-reset">大会要項の16チームに戻す</button>
+    </div>
+    <p class="hint">${DEFAULT_TEAMS[ST.cat]
+      ? "このアプリには大会要項の参加チームが登録済みです。チームが入れ替わった場合はその場で書き換えられ、上のボタンでいつでも元に戻せます。"
+      : "このカテゴリには登録チームがありません。"}</p>
     ${storageNotice()}
   </div>
 
@@ -836,6 +842,14 @@ document.addEventListener("click", e => {
       setSyncOff(off); render(); return;
     }
     case "b-teams-backup": exportBackup(); return;
+    case "b-teams-reset": {
+      if (!DEFAULT_TEAMS[ST.cat]) { alert("このカテゴリには登録チームがありません。"); return; }
+      if (!confirm(`${ST.cat} の参加チームを、大会要項の16チームに戻します。\nいま入力されている内容は置き換わります。\n${cat.order ? "\n※抽選済みのため、抽選結果と試合結果も消えます。" : ""}\n\n戻してよろしいですか？`)) return;
+      snap(`${ST.cat} 参加チームを戻す直前`);
+      cat.teams = defaultTeams(ST.cat);
+      if (cat.order) { cat.order = null; cat.revealed = 0; cat.seed = null; cat.scores = {}; cat.rankOrder = {}; cat.d2 = {}; }
+      render(); return;
+    }
     case "b-print": window.print(); return;
     case "b-csv-draw": dl(fname("抽選結果"), csvDraw()); return;
     case "b-csv-d1": dl(fname("1日目進行表"), csvDay1()); return;

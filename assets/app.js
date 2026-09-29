@@ -37,6 +37,37 @@ const D2_LABEL = {
   F: "決勝", P3: "3位決定戦", P5: "5位決定戦", P7: "7位決定戦"
 };
 
+
+/* 大会要項の参加チーム（固定）。新しい大会を作ったときの初期値になる。
+   [チーム名, 県] の順。編集も差し替えも可能 */
+const DEFAULT_TEAMS = {
+  "U-7": [
+    ["RJ ACADEMY", "鹿児島"], ["レインボー", "長崎"], ["エスペーロ", "福岡"], ["ESL", "佐賀"],
+    ["M-ACT", "熊本"], ["CARPE", "鹿児島"], ["スネイル", "長崎"], ["上津役", "福岡"],
+    ["SOL", "宮崎"], ["エスペランサ熊本", "熊本"], ["太陽延岡", "宮崎"], ["AVANCAR", "鹿児島"],
+    ["ドミンゴ鹿央", "熊本"], ["ダイレクト", "熊本"], ["NESSO", "宮崎"], ["川上FC", "鹿児島"]
+  ],
+  "U-8": [
+    ["ドミンゴ鹿央", "熊本"], ["ソルティーロフレンズ", "福岡"], ["新城FC", "沖縄"], ["嘉島セレシア", "熊本"],
+    ["WISH", "福岡"], ["ドリームキッズ", "大分"], ["カスティージョ", "鹿児島"], ["セレソン", "宮崎"],
+    ["千代サッカー少年団", "大分"], ["BR-Force", "鹿児島"], ["ロンド", "宮崎"], ["アビフレンズ", "佐賀"],
+    ["SIMBA", "長崎"], ["AKEMIOTRY FC", "沖縄"], ["ESL", "佐賀"], ["スネイル", "長崎"]
+  ],
+  "U-9": [
+    ["BR-Force", "鹿児島"], ["ソルティーロフレンズ", "福岡"], ["セレソン", "宮崎"], ["あけみおTRYFC", "沖縄"],
+    ["ドリームキッズ", "大分"], ["アビフレンズ", "佐賀"], ["ドミンゴ鹿央", "熊本"], ["カスティージョ", "鹿児島"],
+    ["SIMBA", "長崎"], ["WISH", "福岡"], ["ロンド", "宮崎"], ["千代サッカー少年団", "大分"],
+    ["ESL", "佐賀"], ["嘉島セレシア", "熊本"], ["スネイル", "長崎"], ["新城FC", "沖縄"]
+  ]
+};
+
+/** 固定の参加チームを複製して返す（未登録のカテゴリは空欄16行） */
+function defaultTeams(cat) {
+  const src = DEFAULT_TEAMS[cat];
+  if (!src) return Array.from({ length: 16 }, () => ({ name: "", pref: "" }));
+  return src.map(([name, pref]) => ({ name, pref }));
+}
+
 /* =======================  乱数（シード固定・再現可能）  ======================= */
 function makeRng(seedStr) {
   let h = 1779033703 ^ seedStr.length;
@@ -69,9 +100,9 @@ function shuffle(arr, rng) {
 }
 
 /* =========================  状態管理  ========================= */
-function initCat() {
+function initCat(cat) {
   return {
-    teams: Array.from({ length: 16 }, () => ({ name: "", pref: "" })),
+    teams: defaultTeams(cat),
     seed: null,
     order: null,      // 抽選結果：枠index(0-15) -> チームindex
     revealed: 0,      // 公開済みの枠数
@@ -91,7 +122,7 @@ function initState() {
     },
     cat: CATS[0],
     view: "setup",
-    cats: Object.fromEntries(CATS.map(c => [c, initCat()]))
+    cats: Object.fromEntries(CATS.map(c => [c, initCat(c)]))
   };
 }
 let ST = initState();
@@ -120,7 +151,7 @@ function normalizeState(o) {
   if (o) {
     st.meta = Object.assign(base.meta, o.meta || {});
     st.sched = Object.assign(base.sched, o.sched || {});
-    CATS.forEach(c => { st.cats[c] = Object.assign(initCat(), (o.cats || {})[c] || {}); });
+    CATS.forEach(c => { st.cats[c] = Object.assign(initCat(c), (o.cats || {})[c] || {}); });
   }
   return st;
 }
