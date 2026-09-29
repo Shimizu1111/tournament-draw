@@ -10,15 +10,24 @@ const CATS = ["U-7", "U-8", "U-9"];
 const LG = ["A", "B", "C", "D"];
 const STORE_KEY = "fantasista-kyushu-v1";
 
-/* 4チーム総当たりの試合順（サークル法）。[リーグ内位置, リーグ内位置] */
-const LEAGUE_ORDER = [[0, 3], [1, 2], [0, 2], [3, 1], [0, 1], [2, 3]];
+/* 4チーム総当たりの試合順。[リーグ内位置, リーグ内位置]
+   四角形の 上辺 → 下辺 → 左辺 → 右辺 → 対角線 → 対角線 の順
+   （位置 0=左上, 1=左下, 2=右上, 3=右下） */
+const LEAGUE_ORDER = [[0, 2], [1, 3], [0, 1], [2, 3], [0, 3], [1, 2]];
+
+/* 四角形の頂点の並び。LEAGUE_ORDER の位置番号に対応 */
+const SQ_POS = ["左上", "左下", "右上", "右下"];
 
 /* トーナメント1回戦の組合せ。[ブロックA, 順位オフセット, ブロックB, 順位オフセット]
    同一ブロック同士が当たらず、1位と2位がクロスするよう配置 */
 const QF_PAIRS = [[0, 0, 1, 1], [2, 0, 3, 1], [1, 0, 0, 1], [3, 0, 2, 1]];
 
-/* 2日目の試合順（1コートあたり12試合）。同一チームが連続しない並び */
-const D2_ORDER = ["QF1", "QF2", "QF3", "QF4", "SF1", "CSF1", "SF2", "CSF2", "F", "P3", "P5", "P7"];
+/* 2日目の進行。1ラウンド2試合を2コート同時に行う。
+   上位トーナメントが奇数枠（No.1,3,5,7,9,11）、下位トーナメントが偶数枠（No.2,4,6,8,10,12） */
+const D2_ROUNDS = [
+  ["QF1", "QF2"], ["QF3", "QF4"], ["CSF1", "CSF2"], ["SF1", "SF2"], ["P3", "P5"], ["F", "P7"]
+];
+const D2_ORDER = D2_ROUNDS.flat();
 
 const D2_LABEL = {
   QF1: "1回戦①", QF2: "1回戦②", QF3: "1回戦③", QF4: "1回戦④",
@@ -74,7 +83,11 @@ function initCat() {
 function initState() {
   return {
     meta: { name: "fantasistaカップ九州大会", d1: "", d2: "", venue: "" },
-    sched: { d1Start: "09:00", d2Start: "09:00", matchMin: 15, gapMin: 5 },
+    sched: {
+      d1Start: "11:30", d2Start: "09:30",
+      matchMin: 18, gapMin: 2,        // 前半8分＋ハーフタイム2分＋後半8分＝18分、移動2分
+      d1Mode: "round"                 // round: A・B同時→C・D同時 ／ block: 1ブロック2試合ずつ
+    },
     cat: CATS[0],
     view: "setup",
     cats: Object.fromEntries(CATS.map(c => [c, initCat()]))
@@ -90,7 +103,11 @@ function load() {
     const raw = localStorage.getItem(STORE_KEY);
     if (!raw) return;
     const o = JSON.parse(raw);
-    if (o && o.cats) ST = Object.assign(initState(), o);
+    if (!o || !o.cats) return;
+    const base = initState();
+    ST = Object.assign(base, o);
+    ST.meta = Object.assign(initState().meta, o.meta || {});
+    ST.sched = Object.assign(initState().sched, o.sched || {});
     CATS.forEach(c => { ST.cats[c] = Object.assign(initCat(), ST.cats[c] || {}); });
   } catch (e) { /* 壊れていれば初期状態 */ }
 }
@@ -152,20 +169,36 @@ function teamAt(cat, slot) {
 function slotLabel(slot) { return LG[Math.floor(slot / 4)] + (slot % 4 + 1); }
 
 /** 1日目の全試合。court:1|2、slot:0-11、no はコートごとに1〜12
-   第1コート A,A,B,B,A,A,B,B,A,A,B,B ／ 第2コート C,C,D,D,C,C,D,D,C,C,D,D
-   1ブロックを2試合続けて行うことで、各チームの試合間隔のばらつきを抑える */
-function day1Schedule() {
+   round 方式：枠1=A・B（2コート同時）→ 枠2=C・D → 枠3=A・B …
+     各ブロックの試合番号は A・B が 1,3,5,7,9,11 ／ C・D が 2,4,6,8,10,12
+   block 方式：第1コート A,A,B,B,… ／ 第2コート C,C,D,D,…
+     1ブロックを2試合続けて行うため、各チームの試合間隔のばらつきが小さい */
+function day1Schedule(mode) {
+  const m = mode || ST.sched.d1Mode || "round";
   const rows = [];
   for (let s = 0; s < 12; s++) {
-    const mi = Math.floor(s / 4) * 2 + (s % 2);   // そのブロックの何試合目か
-    const second = Math.floor(s / 2) % 2 === 1;   // A/C か B/D か
-    [[1, second ? 1 : 0], [2, second ? 3 : 2]].forEach(([court, li]) => {
+    let plan;
+    if (m === "block") {
+      const mi = Math.floor(s / 4) * 2 + (s % 2);
+      const second = Math.floor(s / 2) % 2 === 1;
+      plan = [[1, second ? 1 : 0, mi], [2, second ? 3 : 2, mi]];
+    } else {
+      const mi = Math.floor(s / 2);
+      plan = (s % 2 === 0) ? [[1, 0, mi], [2, 1, mi]] : [[1, 2, mi], [2, 3, mi]];
+    }
+    plan.forEach(([court, li, mi]) => {
       const [x, y] = LEAGUE_ORDER[mi];
       rows.push({ slot: s, court, li, mi, no: s + 1, a: li * 4 + x, b: li * 4 + y });
     });
   }
   rows.sort((p, q) => p.slot - q.slot || p.court - q.court);
   return rows;
+}
+
+/** ブロック li の mi 試合目の試合番号とコート */
+function day1MatchNo(li, mi, mode) {
+  const r = day1Schedule(mode).find(x => x.li === li && x.mi === mi);
+  return r ? { no: r.no, court: r.court } : { no: 0, court: 0 };
 }
 
 /** 各チームの試合間隔（何試合分空くか）の最小・最大 */
@@ -287,21 +320,23 @@ function finalRanking(cat) {
   return out;
 }
 
-/** 2日目の進行。court1=上位、court2=下位。no はコートごとに1〜12 */
+/** 2日目の進行。1枠に2試合（2コート）。上位＝奇数枠、下位＝偶数枠 */
 function day2Schedule() {
   const rows = [];
-  D2_ORDER.forEach((k, s) => {
-    rows.push({ slot: s, court: 1, block: "U", key: k, no: s + 1 });
-    rows.push({ slot: s, court: 2, block: "L", key: k, no: s + 1 });
+  D2_ROUNDS.forEach((keys, r) => {
+    [["U", r * 2], ["L", r * 2 + 1]].forEach(([block, slot]) => {
+      keys.forEach((k, i) => rows.push({ slot, court: i + 1, block, key: k, no: slot + 1 }));
+    });
   });
+  rows.sort((p, q) => p.slot - q.slot || p.court - q.court);
   return rows;
 }
 
 /* =========================  時刻  ========================= */
-function slotTime(startHHMM, slot) {
+function slotTime(startHHMM, slot, offsetMin) {
   const [h, m] = (startHHMM || "09:00").split(":").map(Number);
-  const step = (+ST.sched.matchMin || 15) + (+ST.sched.gapMin || 5);
-  const tot = h * 60 + m + slot * step;
+  const step = (+ST.sched.matchMin || 18) + (+ST.sched.gapMin || 2);
+  const tot = h * 60 + m + slot * step + (offsetMin || 0);
   const hh = Math.floor(tot / 60) % 24, mm = tot % 60;
   return String(hh).padStart(2, "0") + ":" + String(mm).padStart(2, "0");
 }
@@ -315,9 +350,9 @@ function consecutiveViolations(pairsBySlot) {
   }
   return bad;
 }
-function day1Slots() {
+function day1Slots(mode) {
   const bySlot = Array.from({ length: 12 }, () => []);
-  day1Schedule().forEach(r => { bySlot[r.slot].push(r.a, r.b); });
+  day1Schedule(mode).forEach(r => { bySlot[r.slot].push(r.a, r.b); });
   return bySlot;
 }
 function day1Consecutive() {

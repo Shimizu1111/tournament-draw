@@ -44,15 +44,39 @@ function renderSetup() {
   </div>
 
   <div class="panel">
-    <h2>タイムスケジュール<span class="sub">1カテゴリ2コート・全12試合枠で自動計算します</span></h2>
+    <h2>タイムスケジュール<span class="sub">各カテゴリ2コート・全12枠（1枠につき2試合）</span></h2>
     <div class="row">
       <div><label for="f-s1">1日目 開始時刻</label><input id="f-s1" type="time" data-sched="d1Start" value="${esc(s.d1Start)}"></div>
       <div><label for="f-s2">2日目 開始時刻</label><input id="f-s2" type="time" data-sched="d2Start" value="${esc(s.d2Start)}"></div>
       <div><label for="f-mm">1試合の時間（分）</label><input id="f-mm" type="number" min="1" max="90" data-sched="matchMin" value="${s.matchMin}"></div>
       <div><label for="f-gm">試合間インターバル（分）</label><input id="f-gm" type="number" min="0" max="60" data-sched="gapMin" value="${s.gapMin}"></div>
     </div>
-    <p class="hint">1試合 ${s.matchMin}分 ＋ 入替 ${s.gapMin}分 → 全12枠で
-      ${Math.floor(12 * ((+s.matchMin) + (+s.gapMin)) / 60)}時間${(12 * ((+s.matchMin) + (+s.gapMin))) % 60}分（最終試合の終了まで）</p>
+    <p class="hint">1試合 ${s.matchMin}分 ＋ 入替 ${s.gapMin}分 ＝ 1枠 ${(+s.matchMin) + (+s.gapMin)}分
+      （前半8分＋ハーフタイム2分＋後半8分＝18分、移動2分の想定）</p>
+    <div class="courtcol" style="margin-top:14px">
+      ${[["1日目（予選リーグ）", ST.sched.d1Start], ["2日目（トーナメント）", ST.sched.d2Start]].map(([ttl, st0]) => `
+        <div><h3 class="sect"><span class="tag">${ttl}</span></h3>
+        <table class="sched"><tr><th>枠</th><th>時間</th><th>枠</th><th>時間</th></tr>
+        ${[0, 1, 2, 3, 4, 5].map(i => `<tr>
+          <td class="no">${i + 1}</td><td class="tm">${slotTime(st0, i)}〜${slotTime(st0, i + 1)}</td>
+          <td class="no">${i + 7}</td><td class="tm">${slotTime(st0, i + 6)}〜${slotTime(st0, i + 7)}</td>
+        </tr>`).join("")}</table></div>`).join("")}
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>1日目の進行方式<span class="sub">4ブロックを2コートにどう割り当てるか</span></h2>
+    ${[["round", "ラウンド型（大会要項の図）", "枠1＝A・B、枠2＝C・D、枠3＝A・B…と交互。各ブロックの試合番号は A・B が 1,3,5,7,9,11、C・D が 2,4,6,8,10,12 になります。"],
+       ["block", "ブロック集中型", "第1コートで A,A,B,B…、第2コートで C,C,D,D…。1ブロックを2試合続けて行うため、各チームの試合間隔のばらつきが小さくなります。"]]
+      .map(([v, ttl, desc]) => {
+        const rest = restRange(day1Slots(v));
+        return `<label style="display:flex;gap:10px;align-items:flex-start;padding:10px;border:1px solid ${ST.sched.d1Mode === v ? "var(--accent)" : "var(--border)"};border-radius:8px;margin-bottom:8px;cursor:pointer;color:var(--text)">
+          <input type="radio" name="d1mode" value="${v}" ${ST.sched.d1Mode === v ? "checked" : ""} style="width:auto;margin-top:4px">
+          <span><b style="font-size:14px">${ttl}</b>
+            <span class="tag ${rest.min >= 2 ? "" : "gray"}" style="margin-left:8px">試合間隔 ${rest.min}〜${rest.max}試合分</span>
+            <br><span style="font-size:12px;color:var(--muted)">${desc}</span></span>
+        </label>`;
+      }).join("")}
   </div>
 
   <div class="panel">
@@ -166,40 +190,54 @@ function renderDraw() {
 }
 
 /* ===================== リーグ戦の四角形（対戦図） ===================== */
-/** 4隅にチーム名、辺と対角線の6本が6試合を表す図 */
+/** 4隅にチーム名、辺と対角線の6本が6試合を表す図。各線に試合番号を表示 */
 function leagueSquare(cat, li) {
-  const L = LG[li];
-  const X1 = 112, X2 = 288, Y1 = 74, Y2 = 182;   // 四角形の頂点
-  const pt = [[X1, Y1], [X2, Y1], [X2, Y2], [X1, Y2]];   // 1番→2番→3番→4番（左上から時計回り）
-  const lab = [[X1, 50], [X2, 50], [X2, 212], [X1, 212]];
+  const X1 = 170, X2 = 310, Y1 = 50, Y2 = 148;
+  // 位置 0=左上, 1=左下, 2=右上, 3=右下（LEAGUE_ORDER と対応）
+  const pt = [[X1, Y1], [X1, Y2], [X2, Y1], [X2, Y2]];
+  const nameAt = [[X1 - 12, Y1 - 6, "end"], [X1 - 12, Y2 + 20, "end"],
+                  [X2 + 12, Y1 - 6, "start"], [X2 + 12, Y2 + 20, "start"]];
 
-  const lines = [
-    [0, 1], [1, 2], [2, 3], [3, 0], [0, 2], [1, 3]       // 辺4本＋対角線2本＝6試合
-  ].map(([i, j]) =>
+  const lines = LEAGUE_ORDER.map(([i, j]) =>
     `<line x1="${pt[i][0]}" y1="${pt[i][1]}" x2="${pt[j][0]}" y2="${pt[j][1]}"/>`).join("");
 
+  // 試合番号。辺は中点、対角線は上側の頂点から30%の位置に置いて重なりを避ける
+  const nums = LEAGUE_ORDER.map(([i, j], mi) => {
+    const A = pt[i], B = pt[j];
+    const diag = A[0] !== B[0] && A[1] !== B[1];
+    let x, y;
+    if (diag) {
+      const [T, O] = A[1] < B[1] ? [A, B] : [B, A];
+      x = T[0] + (O[0] - T[0]) * 0.3; y = T[1] + (O[1] - T[1]) * 0.3;
+    } else {
+      x = (A[0] + B[0]) / 2; y = (A[1] + B[1]) / 2;
+    }
+    const { no } = day1MatchNo(li, mi);
+    return `<circle cx="${x}" cy="${y}" r="10.5" class="nmask"/>
+      <text x="${x}" y="${y + 4}" class="mno">${no}</text>`;
+  }).join("");
+
   const corners = pt.map(([x, y], p) => `
-    <circle cx="${x}" cy="${y}" r="13" class="cn"/>
+    <circle cx="${x}" cy="${y}" r="12" class="cn"/>
     <text x="${x}" y="${y + 4.5}" class="cnum">${p + 1}</text>`).join("");
 
-  const names = lab.map(([x, y], p) => {
+  const names = nameAt.map(([x, y, anchor], p) => {
     const nm = teamNameAt(cat, li * 4 + p);
-    const fs = nm.length > 14 ? 10 : nm.length > 10 ? 11.5 : 13;
-    return `<text x="${x}" y="${y}" class="tnm" font-size="${fs}">${esc(nm)}</text>`;
+    const fs = nm.length > 13 ? 10 : nm.length > 10 ? 11.5 : 13;
+    return `<text x="${x}" y="${y}" text-anchor="${anchor}" class="tnm" font-size="${fs}">${esc(nm)}</text>`;
   }).join("");
 
   return `<div class="sq">
-    <svg viewBox="0 0 400 232" role="img" aria-label="${L}ブロック 対戦図">
-      <g class="ln">${lines}</g>
-      <rect x="164" y="114" width="72" height="28" class="mask"/>
-      <text x="200" y="133" class="ctr">${L}ブロック</text>
-      ${corners}${names}
+    <h3>${LG[li]}ブロック<span>①〜④ ＝ ${LG[li]}1〜${LG[li]}4</span></h3>
+    <svg viewBox="0 0 480 176" role="img" aria-label="${LG[li]}ブロック 対戦図">
+      <g class="ln">${lines}</g>${nums}${corners}${names}
     </svg>
   </div>`;
 }
+
 function leagueSquares(cat) {
   return `<div class="panel">
-    <h2>${esc(ST.cat)}　1日目 リーグ戦 対戦図<span class="sub">4隅がチーム・線が6試合を表します（抽選結果を自動反映）</span></h2>
+    <h2>${esc(ST.cat)}　1日目 リーグ戦 対戦図<span class="sub">4隅がチーム、線の数字が試合番号です（抽選結果を自動反映）</span></h2>
     <div class="sqgrid">${LG.map((_, li) => leagueSquare(cat, li)).join("")}</div>
   </div>`;
 }
@@ -259,8 +297,9 @@ function day1ScheduleSection() {
         <td class="vs">vs</td>
         <td>${esc(teamNameAt(cat, r.b))}</td>
       </tr>`).join("");
+    const blks = [...new Set(rows.filter(r => r.court === ct).map(r => LG[r.li]))].join("・");
     return `<div><h3 class="sect"><span class="tag">第${ct}コート</span>
-      <span style="color:var(--muted);font-size:12px">${ct === 1 ? "A・Bブロック" : "C・Dブロック"}</span></h3>
+      <span style="color:var(--muted);font-size:12px">${blks}ブロック</span></h3>
       <table class="sched"><tr><th>No</th><th>開始</th><th>組</th><th colspan="3">対戦カード</th></tr>${tr}</table></div>`;
   }).join("");
 
@@ -300,7 +339,9 @@ function matchBox(cat, block, key, no) {
       <input class="sc" type="number" min="0" data-d2="${d2Key(block, key)}" data-side="${sd}" value="${m[sd] ?? ""}">
     </div>`;
   }).join("");
-  return `<div class="match"><div class="mno"><span>${D2_LABEL[key]}</span><span>第${no}試合</span></div>${sides}</div>`;
+  const ct = day2Schedule().find(r => r.block === block && r.key === key);
+  return `<div class="match"><div class="mno"><span>${D2_LABEL[key]}</span>
+    <span>No.${no}・${ct ? ct.court : 1}C</span></div>${sides}</div>`;
 }
 
 function bracketFor(cat, block, nos) {
@@ -333,7 +374,7 @@ function blockSection(cat, block) {
     <h2 class="sect"><span class="tag ${isU ? "" : "lo"}">${isU ? "上位トーナメント" : "下位トーナメント"}</span>
       <span style="font-weight:400;font-size:13px;color:var(--muted)">
         ${isU ? "各ブロック 1位・2位 の8チーム → 1〜8位を決定" : "各ブロック 3位・4位 の8チーム → 9〜16位を決定"}
-        ／ 第${isU ? 1 : 2}コート</span></h2>
+        ／ No.${isU ? "1・3・5・7・9・11（奇数枠）" : "2・4・6・8・10・12（偶数枠）"}</span></h2>
     ${bracketFor(cat, block, nos)}
     <h3 class="sect" style="margin-top:6px"><span class="tag gray">順位決定戦</span></h3>
     ${placers(cat, block, nos)}
@@ -356,14 +397,15 @@ function renderDay2() {
       return `<tr>
         <td class="no">${r.no}</td>
         <td class="tm">${slotTime(ST.sched.d2Start, r.slot)}</td>
-        <td class="lg" style="font-size:11px;font-weight:400">${D2_LABEL[r.key]}</td>
+        <td class="lg" style="font-size:11px;font-weight:400">
+          <span class="tag ${r.block === "U" ? "" : "lo"}" style="font-size:10px;padding:1px 6px">${r.block === "U" ? "上位" : "下位"}</span>
+          ${D2_LABEL[r.key]}</td>
         <td class="a">${esc(nameOrLabel(cat, A))}</td>
         <td class="vs">vs</td>
         <td>${esc(nameOrLabel(cat, B))}</td>
       </tr>`;
     }).join("");
-    return `<div><h3 class="sect"><span class="tag ${ct === 1 ? "" : "lo"}">第${ct}コート</span>
-      <span style="color:var(--muted);font-size:12px">${ct === 1 ? "上位トーナメント" : "下位トーナメント"}</span></h3>
+    return `<div><h3 class="sect"><span class="tag">第${ct}コート</span></h3>
       <table class="sched"><tr><th>No</th><th>開始</th><th>区分</th><th colspan="3">対戦カード</th></tr>${tr}</table></div>`;
   }).join("");
 
@@ -614,6 +656,7 @@ document.addEventListener("change", e => {
     cat.d2[k][el.dataset.side] = el.value === "" ? null : Math.max(0, +el.value);
     render(); return;
   }
+  if (el.name === "d1mode") { ST.sched.d1Mode = el.value; render(); return; }
   if (el.id === "f-avoid") { cat.avoidPref = el.checked; save(); return; }
   if (el.id === "f-file") {
     const f = el.files && el.files[0]; if (!f) return;
