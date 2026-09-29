@@ -179,8 +179,7 @@ function renderEvMenu() {
       return `<button class="pick ${cur ? "cur" : ""}" data-evpick="${ev.id}">
         <span class="ck">${cur ? "✓" : ""}</span>
         <span class="nm"><b>${esc(st.meta.name || "（名称未設定）")}</b>
-          <span>抽選 ${pg.drawn}/3　・　最終更新 ${nowStamp(ev.updatedAt)}${
-            sh ? "　・　共有中" + (sh.role === "viewer" ? "（閲覧専用）" : "") : ""}</span></span>
+          <span>抽選 ${pg.drawn}/3　・　最終更新 ${nowStamp(ev.updatedAt)}</span></span>
       </button>`;
     }).join("")}
     <hr>
