@@ -21,6 +21,19 @@ function nameOrLabel(cat, side) {
   return side.slot === null ? side.label : teamNameAt(cat, side.slot);
 }
 
+/** 動作確認用のサンプル16チーム（九州7県×2＋開催県枠2） */
+function demoTeams() {
+  const P = ["福岡", "佐賀", "長崎", "熊本", "大分", "宮崎", "鹿児島"];
+  const t = [];
+  P.forEach(p => {
+    t.push({ name: p + "FC", pref: p });
+    t.push({ name: p + "サッカースポーツ少年団", pref: p });
+  });
+  t.push({ name: "熊本クラブA（開催県枠）", pref: "熊本" });
+  t.push({ name: "熊本クラブB（開催県枠）", pref: "熊本" });
+  return t;
+}
+
 /* ===================== 大会設定 ===================== */
 function renderSetup() {
   const m = ST.meta, s = ST.sched;
@@ -48,11 +61,19 @@ function renderSetup() {
     <div class="row">
       <div><label for="f-s1">1日目 開始時刻</label><input id="f-s1" type="time" data-sched="d1Start" value="${esc(s.d1Start)}"></div>
       <div><label for="f-s2">2日目 開始時刻</label><input id="f-s2" type="time" data-sched="d2Start" value="${esc(s.d2Start)}"></div>
-      <div><label for="f-mm">1試合の時間（分）</label><input id="f-mm" type="number" min="1" max="90" data-sched="matchMin" value="${s.matchMin}"></div>
-      <div><label for="f-gm">試合間インターバル（分）</label><input id="f-gm" type="number" min="0" max="60" data-sched="gapMin" value="${s.gapMin}"></div>
+      <div><label for="f-mm">1試合の時間（分）<span style="display:block;font-size:10px">前半＋ハーフタイム＋後半</span></label>
+        <input id="f-mm" type="number" min="1" max="90" data-sched="matchMin" value="${s.matchMin}"></div>
+      <div><label for="f-gm">試合間インターバル（分）<span style="display:block;font-size:10px">次の試合までの入替・移動</span></label>
+        <input id="f-gm" type="number" min="0" max="60" data-sched="gapMin" value="${s.gapMin}"></div>
     </div>
-    <p class="hint">1試合 ${s.matchMin}分 ＋ 入替 ${s.gapMin}分 ＝ 1枠 ${(+s.matchMin) + (+s.gapMin)}分
-      （前半8分＋ハーフタイム2分＋後半8分＝18分、移動2分の想定）</p>
+    <div class="note">
+      <b>1枠 ＝ ${(+s.matchMin) + (+s.gapMin)}分</b>（${s.matchMin}分 ＋ ${s.gapMin}分）　→　12枠で
+      ${Math.floor(12 * ((+s.matchMin) + (+s.gapMin)) / 60)}時間${(12 * ((+s.matchMin) + (+s.gapMin))) % 60}分
+      <br><span style="font-size:12px;color:var(--muted)">
+        時刻の計算に使うのは<b>2つの合計</b>だけです。18分＋2分 と 15分＋5分 はどちらも1枠20分なので、進行表の時刻は同じになります。<br>
+        合計を変えると全試合の開始時刻がずれます。対戦カードや試合番号は変わりません。
+        大会要項どおりなら <b>18分 ＋ 2分</b> です。</span>
+    </div>
     <div class="courtcol" style="margin-top:14px">
       ${[["1日目（予選リーグ）", ST.sched.d1Start], ["2日目（トーナメント）", ST.sched.d2Start]].map(([ttl, st0]) => `
         <div><h3 class="sect"><span class="tag">${ttl}</span></h3>
@@ -87,6 +108,17 @@ function renderSetup() {
       <button id="b-reset" style="margin-left:auto;color:var(--warn)">全データを初期化</button>
     </div>
     <p class="hint">抽選会の当日は、抽選後に必ず一度バックアップを保存してください。別のPCやスマホに引き継ぐこともできます。</p>
+  </div>
+
+  <div class="panel">
+    <h2>動作確認用のサンプルデータ<span class="sub">操作を試すためのダミーデータです</span></h2>
+    <div class="btns" style="margin-top:0">
+      <button id="b-demo">3カテゴリにサンプル16チームを入れて抽選まで実行</button>
+      <button id="b-demo2">さらに1日目の結果をランダムで埋める</button>
+    </div>
+    <p class="hint">九州7県×2＋開催県枠2の想定で16チーム分入ります。熊本が4チームあるので、
+      同じ県が4ブロックに分かれる動きも確認できます。<br>
+      <b style="color:var(--warn)">本番の登録前に「全データを初期化」でサンプルを消してください。</b></p>
   </div>`;
 }
 
@@ -595,6 +627,32 @@ document.addEventListener("click", e => {
       if (!confirm("抽選をやり直します。現在の抽選結果と、入力済みの試合結果もすべて消えます。よろしいですか？")) return;
       cat.order = null; cat.revealed = 0; cat.seed = null; cat.scores = {}; cat.rankOrder = {}; cat.d2 = {};
       render(); return;
+    case "b-demo": {
+      if (!confirm("3カテゴリすべてにサンプルの16チームを入れ、抽選まで実行します。\n現在入力されている内容は上書きされます。よろしいですか？")) return;
+      CATS.forEach(c => {
+        const x = ST.cats[c] = initCat();
+        x.teams = demoTeams();
+        x.avoidPref = true;
+        x.seed = newSeed();
+        const keep = ST.cat; ST.cat = c;          // drawOrder はカテゴリ名も種に使う
+        x.order = drawOrder(x, x.seed);
+        ST.cat = keep;
+        x.revealed = 16;
+      });
+      ST.view = "draw"; render(); window.scrollTo(0, 0); return;
+    }
+    case "b-demo2": {
+      if (!CATS.every(c => ST.cats[c].order)) { alert("先に「サンプル16チームを入れて抽選まで実行」を押してください。"); return; }
+      if (!confirm("1日目の全試合にランダムなスコアを入れます。入力済みの結果は上書きされます。よろしいですか？")) return;
+      CATS.forEach((c, ci) => {
+        const x = ST.cats[c], rng = makeRng("demo-score-" + c + "-" + x.seed);
+        x.scores = {}; x.rankOrder = {};
+        LG.forEach(L => LEAGUE_ORDER.forEach((_, mi) => {
+          x.scores[L + "-" + mi] = { a: Math.floor(rng() * 4), b: Math.floor(rng() * 4) };
+        }));
+      });
+      ST.view = "day1"; render(); window.scrollTo(0, 0); return;
+    }
     case "b-print": window.print(); return;
     case "b-csv-draw": dl(fname("抽選結果"), csvDraw()); return;
     case "b-csv-d1": dl(fname("1日目進行表"), csvDay1()); return;
