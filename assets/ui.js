@@ -286,6 +286,7 @@ function renderTeams() {
     <h2>${esc(ST.cat)} 参加チーム<span class="sub">16チーム（県名は同県対戦の回避に使います・任意）</span></h2>
     <div class="teamgrid">${rows}</div>
     <p class="hint">入力済み <b class="${filled === 16 ? "ok" : ""}">${filled} / 16</b> チーム${cat.order ? "　※すでに抽選済みです。チームを変更した場合は抽選をやり直してください。" : ""}</p>
+    ${storageNotice()}
   </div>
 
   <div class="panel">
@@ -294,6 +295,24 @@ function renderTeams() {
     <textarea id="f-bulk" rows="6" placeholder="〇〇FC	熊本&#10;△△SSS	福岡&#10;..."></textarea>
     <div class="btns"><button id="b-bulk" class="primary">貼り付けた内容で置き換える</button></div>
   </div>`;
+}
+
+/** この端末にしか保存されていないことを知らせる（別端末で空に見える理由） */
+function storageNotice() {
+  const sh = shareOf();
+  if (sh) {
+    return `<div class="note"><span class="ok">✓ 共有中</span>
+      　共有コード <b class="mono">${fmtCode(sh.code)}</b> で、他の端末からも同じ内容を開けます。
+      ${sh.role === "viewer" ? "（この端末は閲覧専用です）" : ""}</div>`;
+  }
+  return `<div class="note warn">
+    <b>入力内容は、いま使っているこの端末にだけ保存されます。</b><br>
+    別のPCやスマホで同じURLを開いても、ここで入力したチームは表示されません（消えたわけではありません）。
+    別の端末でも開きたい場合は、共有を始めてください。
+    <div class="btns">
+      <button class="primary" id="b-teams-share">共有を始める</button>
+      <button id="b-teams-backup">バックアップを保存しておく</button>
+    </div></div>`;
 }
 
 /* ===================== 抽選 ===================== */
@@ -914,6 +933,13 @@ document.addEventListener("click", e => {
       shareStop(); render(); return;
     case "b-cf-server": conflictTakeServer(); render(); return;
     case "b-cf-local": conflictKeepLocal().then(() => render()); return;
+    case "b-teams-share":
+      b.disabled = true;
+      shareCreate()
+        .then(sh => { alert("共有を開始しました。\n\n共有コード：" + fmtCode(sh.code) + "\n\n「大会設定 → 他の端末と共有」から、閲覧用リンクをコピーして配れます。"); render(); })
+        .catch(e => { alert(e.message); render(); });
+      return;
+    case "b-teams-backup": exportBackup(); return;
     case "b-print": window.print(); return;
     case "b-csv-draw": dl(fname("抽選結果"), csvDraw()); return;
     case "b-csv-d1": dl(fname("1日目進行表"), csvDay1()); return;

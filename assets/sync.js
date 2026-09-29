@@ -108,7 +108,7 @@ function shareStop() {
 function schedulePush() {
   if (!isOwner() || !apiBase()) return;
   clearTimeout(SYNC.pushTimer);
-  SYNC.pushTimer = setTimeout(pushNow, 2500);   // 連続入力をまとめて1回に
+  SYNC.pushTimer = setTimeout(pushNow, 4000);   // 連続入力をまとめて1回に
 }
 
 async function pushNow() {
@@ -140,7 +140,7 @@ async function pushNow() {
     SYNC.error = "オフラインのようです。接続が戻ったら自動で送信します。";
   } finally {
     SYNC.busy = false;
-    if (typeof render === "function") render();
+    syncRefresh();
   }
 }
 
@@ -157,11 +157,11 @@ async function pullNow(force) {
       if (isViewer()) {
         applyRemote(r.body);
         SYNC.status = "更新を受信しました " + nowStamp(Date.now());
-        if (typeof render === "function") render();
+        if (typeof render === "function") render();   // 閲覧端末は入力しないので安全
       } else {
         // オーナー端末：別の端末で更新されていた
         SYNC.conflict = r.body;
-        if (typeof render === "function") render();
+        syncRefresh();
       }
     } else {
       sh.at = Date.now();
@@ -169,6 +169,15 @@ async function pullNow(force) {
   } catch (e) {
     SYNC.error = "オフラインのようです。接続が戻ったら自動で受信します。";
   } finally { SYNC.busy = false; }
+}
+
+/** 同期後の画面更新。入力中は再描画せず、フォーカスと変換中の文字を壊さない */
+function syncRefresh() {
+  if (typeof render !== "function") return;
+  const ae = document.activeElement;
+  const typing = ae && ae.closest && ae.closest("#view") && /^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName);
+  if (typing && !SYNC.conflict) return;      // 競合の通知だけは入力中でも出す
+  render();
 }
 
 function applyRemote(body) {
