@@ -101,35 +101,22 @@ function renderSetup() {
   </div>
 
   <div class="panel">
-    <h2>大会の管理<span class="sub">切り替えるだけなら画面左上の大会名からできます</span></h2>
-    <div class="evlist">
-      ${Object.values(DB.events).sort((a, b) => b.updatedAt - a.updatedAt).map(ev => {
-        const st = normalizeState(ev.state);
-        const pg = eventProgress(ev);
-        const cur = ev.id === DB.currentId;
-        return `<div class="evrow ${cur ? "cur" : ""}">
-          <div class="ev-main">
-            <b>${esc(st.meta.name || "（名称未設定）")}</b>${cur ? '<span class="tag">使用中</span>' : ""}
-            <div class="ev-sub">
-              ${st.meta.d1 ? esc(st.meta.d1.replace(/-/g, "/")) + "　" : ""}最終更新 ${nowStamp(ev.updatedAt)}<br>
-              抽選 ${pg.drawn}/3カテゴリ　・　1日目終了 ${pg.d1}/3　・　順位確定 ${pg.done}/3
-            </div>
-          </div>
-          <div class="ev-btn">
-            ${cur ? "" : `<button class="sm" data-ev="open" data-id="${ev.id}">開く</button>`}
-            <button class="sm" data-ev="dup" data-id="${ev.id}">複製</button>
-            <button class="sm" data-ev="del" data-id="${ev.id}" style="color:var(--warn)">削除</button>
-          </div>
-        </div>`;
-      }).join("")}
+    <h2>この大会の操作<span class="sub">切り替えと新規作成は、画面左上の大会名からできます</span></h2>
+    <div class="evrow cur">
+      <div class="ev-main"><b>${esc(ST.meta.name || "（名称未設定）")}</b>
+        <div class="ev-sub">${(() => {
+          const ev = DB.events[DB.currentId], pg = eventProgress(ev);
+          return `最終更新 ${nowStamp(ev.updatedAt)}<br>抽選 ${pg.drawn}/3カテゴリ　・　1日目終了 ${pg.d1}/3　・　順位確定 ${pg.done}/3`;
+        })()}</div>
+      </div>
     </div>
     <div class="btns">
-      <button class="primary" id="b-ev-new">新しい大会を作る</button>
-      <button id="b-ev-new2">今の設定を引き継いで作る</button>
-      <button id="b-ev-clear" style="margin-left:auto;color:var(--warn)">この大会の入力内容をすべて消す</button>
+      <button data-ev="dup" data-id="${DB.currentId}">この大会を複製する</button>
+      <button id="b-ev-clear" style="color:var(--warn)">入力内容をすべて消す</button>
+      <button data-ev="del" data-id="${DB.currentId}" style="margin-left:auto;color:var(--warn)">この大会を削除する</button>
     </div>
-    <p class="hint">「今の設定を引き継いで作る」は、タイムスケジュールと進行方式だけを引き継ぎ、
-      チームと結果は空の状態で新しい大会を作ります。来年の大会や別カップの準備に使えます。</p>
+    <p class="hint">「入力内容をすべて消す」はチーム・抽選・試合結果だけを消し、大会名とタイムスケジュールは残します。
+      どちらも直前の状態が復元ポイントに残るので、あとから戻せます。</p>
   </div>
 
   ${sharePanel()}
@@ -200,7 +187,7 @@ function renderEvMenu() {
     <hr>
     <button class="act" id="b-evm-new">＋　新しい大会を作る</button>
     <button class="act" id="b-evm-new2">＋　今の設定を引き継いで作る</button>
-    <button class="act" id="b-evm-manage">　　大会の管理を開く（複製・削除）</button>`;
+    <button class="act" id="b-evm-manage">　　この大会を複製・削除する</button>`;
 }
 function closeEvMenu() { if (evMenuOpen) { evMenuOpen = false; renderEvMenu(); } }
 
@@ -790,7 +777,7 @@ document.addEventListener("click", e => {
     render(); window.scrollTo(0, 0); return;
   }
   if (b.id === "b-evm-manage") { closeEvMenu(); ST.view = "setup"; render();
-    setTimeout(() => { const h = [...document.querySelectorAll(".panel>h2")].find(x => x.textContent.includes("大会の管理")); if (h) h.scrollIntoView({ behavior: "smooth", block: "start" }); }, 30);
+    setTimeout(() => { const h = [...document.querySelectorAll(".panel>h2")].find(x => x.textContent.includes("この大会の操作")); if (h) h.scrollIntoView({ behavior: "smooth", block: "start" }); }, 30);
     return; }
   if (b.id === "b-evm-new" || b.id === "b-evm-new2") {
     closeEvMenu();
@@ -938,14 +925,6 @@ document.addEventListener("click", e => {
       const label = (prompt("復元ポイントの名前", "手動保存") || "").trim();
       if (!label) return;
       snap(label); render(); return;
-    }
-    case "b-ev-new":
-    case "b-ev-new2": {
-      const nm = (prompt("新しい大会の名前", ST.meta.name || "大会") || "").trim();
-      if (!nm) return;
-      save();
-      createEvent(nm, b.id === "b-ev-new2");
-      render(); return;
     }
     case "b-ev-clear":
       if (!confirm(`大会「${ST.meta.name}」の入力内容（チーム・抽選・試合結果）をすべて消します。\n直前の状態は復元ポイントに残ります。\n\n消してよろしいですか？`)) return;
